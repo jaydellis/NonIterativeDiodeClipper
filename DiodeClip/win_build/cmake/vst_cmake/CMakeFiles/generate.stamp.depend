@@ -1,0 +1,24 @@
+# CMake generation dependency list for this directory.
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_AAXSupport.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_AddCommonOptions.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_AddSMTGLibrary.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_AddVST3Library.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_AddVST3Options.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_Bundle.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_CodeSign.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_ConfigureCmakeGenerator.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_CoreAudioSupport.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_DetectPlatform.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_ExportedSymbols.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_Global.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_PlatformIOS.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_PlatformToolset.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_Platform_Windows.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_PrefixHeader.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_SetDebugExecutable.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_SetupVST3LibraryDefaultPath.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_UniversalBinary.cmake
+C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/cmake/modules/SMTG_VstGuiSupport.cmake
+C:/ASPiK_1.7.2/ALL_SDK/myprojects/DiodeClip/cmake/vst_cmake/CMakeLists.txt
+C:/Program Files/CMake/share/cmake-3.16/Modules/CMakeParseArguments.cmake
+C:/Program Files/CMake/share/cmake-3.16/Modules/CMakePrintHelpers.cmake

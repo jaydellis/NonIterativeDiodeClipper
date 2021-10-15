@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\plugin-bindings\vst3groupcontroller.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\plugin-bindings\vst3padcontroller.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\plugin-bindings\vst3editor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\ASPiK_1.7.2\ALL_SDK\VST_SDK\VST3_SDK\public.sdk\source\vst\vstguieditor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\plugin-bindings\vst3groupcontroller.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\plugin-bindings\vst3padcontroller.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\plugin-bindings\vst3editor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\cmake\vst_cmake\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{3EAEF235-C852-3B67-9741-B4E0506C327D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{9706FF94-E0BF-3E61-B2E8-EB8B8E0F931B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

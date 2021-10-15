@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\CMakeFiles\7a5d31bade6a2aeaf944fd10648e666c\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{8C5E208F-B22F-3079-AFAF-2EEBD2C2FDAC}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

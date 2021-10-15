@@ -1,0 +1,7 @@
+﻿  Building Custom Rule C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/pluginterfaces/CMakeLists.txt
+  conststringtable.cpp
+  coreiids.cpp
+  funknown.cpp
+  ustring.cpp
+  Generating Code...
+  pluginterfaces.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\pluginterfaces.lib

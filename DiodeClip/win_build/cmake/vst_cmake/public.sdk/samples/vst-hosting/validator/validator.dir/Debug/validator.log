@@ -1,0 +1,45 @@
+﻿  Building Custom Rule C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/public.sdk/samples/vst-hosting/validator/CMakeLists.txt
+  plugprovider.cpp
+  memorystream.cpp
+  busactivation.cpp
+  busconsistency.cpp
+  businvalidindex.cpp
+  checkaudiobusarrangement.cpp
+  scanbusses.cpp
+  sidechainarrangement.cpp
+  editorclasses.cpp
+  midilearn.cpp
+  midimapping.cpp
+  scanparameters.cpp
+  suspendresume.cpp
+  terminit.cpp
+  keyswitch.cpp
+  noteexpression.cpp
+  automation.cpp
+  process.cpp
+  processcontextrequirements.cpp
+  processformat.cpp
+  Generating Code...
+  Compiling...
+  processinputoverwriting.cpp
+  processtail.cpp
+  processthreaded.cpp
+  silenceflags.cpp
+  silenceprocessing.cpp
+  speakerarrangement.cpp
+  variableblocksize.cpp
+  bypasspersistence.cpp
+  invalidstatetransition.cpp
+  repeatidenticalstatetransition.cpp
+  validstatetransition.cpp
+  testbase.cpp
+  checkunitstructure.cpp
+  scanprograms.cpp
+  scanunits.cpp
+  vsttestsuite.cpp
+  main.cpp
+  usediids.cpp
+  validator.cpp
+  module_win32.cpp
+  Generating Code...
+  validator.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\bin\Debug\validator.exe

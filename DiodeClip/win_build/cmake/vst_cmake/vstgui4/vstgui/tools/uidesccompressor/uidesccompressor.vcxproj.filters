@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\tools\uidesccompressor\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\tools\uidesccompressor\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{9706FF94-E0BF-3E61-B2E8-EB8B8E0F931B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
