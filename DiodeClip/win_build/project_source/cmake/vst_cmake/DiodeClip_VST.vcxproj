@@ -319,6 +319,8 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\filters.h" />
+    <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\fxobjects.h" />
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\Iir.h" />
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\iir\Biquad.h" />
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\iir\Butterworth.h" />
@@ -341,6 +343,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugingui.h" />
     <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\pluginparameter.h" />
     <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\pluginstructures.h" />
+    <ClCompile Include="..\..\..\..\project_source\source\PluginObjects\fxobjects.cpp" />
     <ClCompile Include="..\..\..\..\project_source\source\PluginObjects\iir\Biquad.cpp" />
     <ClCompile Include="..\..\..\..\project_source\source\PluginObjects\iir\Butterworth.cpp" />
     <ClCompile Include="..\..\..\..\project_source\source\PluginObjects\iir\Cascade.cpp" />

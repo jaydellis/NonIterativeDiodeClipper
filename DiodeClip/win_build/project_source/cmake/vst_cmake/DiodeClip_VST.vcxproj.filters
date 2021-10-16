@@ -58,6 +58,9 @@
     <ClCompile Include="..\..\..\..\project_source\source\PluginObjects\iir\RBJ.cpp">
       <Filter>PluginObjects\iir</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\project_source\source\PluginObjects\fxobjects.cpp">
+      <Filter>PluginObjects</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\guiconstants.h">
@@ -148,6 +151,12 @@
       <Filter>PluginObjects\iir</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\rchundenormal.h">
+      <Filter>PluginObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\fxobjects.h">
+      <Filter>PluginObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\filters.h">
       <Filter>PluginObjects</Filter>
     </ClInclude>
   </ItemGroup>

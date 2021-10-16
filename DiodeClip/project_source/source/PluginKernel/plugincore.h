@@ -18,6 +18,8 @@
 #include "rchundenormal.h"
 #include "Iir.h"
 
+#include "fxobjects.h"
+
 // **--0x7F1F--**
 
 enum controlID {
@@ -28,8 +30,8 @@ enum controlID {
 	capacitor = 4,
 	satcurrent = 5,
 	thermalvoltage = 6,
-	reserved0 = 7,
-	reserved1 = 8,
+	hipass = 7,
+	hipasscutoff = 8,
 	reserved2 = 9,
 	oversampling = 10
 
@@ -139,14 +141,17 @@ public:
 		return a * x + (-1. + a) * x;
 	}
 
-	Iir::ChebyshevII::LowPass<8> ups[2];
+	Iir::ChebyshevII::LowPass<9> ups[2];
 
-	Iir::ChebyshevII::LowPass<8> dwn[2];
+	Iir::ChebyshevII::LowPass<9> dwn[2];
 
 	double ingainfactor = 1.;
 	double ingainsm = 1.;
 	double outgainfactor = 1.;
 	double outgainsm = 1.;
+
+	double hipasscutoff_p = 10.;
+	int hipass_p = 0;
 
 	double xout = 0.;
 	double xoutput[32] = { 0. };
@@ -155,11 +160,23 @@ public:
 
 	double dcblock[8] = { 0. };
 	double dcstate[8] = { 0. }; 
+	double dccut = .999;
 
 	double inputgain_p = 0.;
 	double outputgain_p = 0.;
+
 	double alpha_p = 5.;
-	double resistor_p = 1000.;
+
+	int resistor_p = 1000;
+
+	double Is = 0.1;
+	double vt = 0.1;
+	double C = 0.1;
+
+	double c1 = 0.1;
+	double c2 = 0.1;
+	double c3 = 0.1;
+	double c4 = 0.1;
 
 	double capacitor_p = 0.000000033;
 	double thermalvoltage_p = 0.026;
@@ -167,7 +184,16 @@ public:
 
 	double fx = 0.0001;
 
-	int oversampling_p = 4;
+	int oversampling_p = 8;
+	int oversampling_pOld = 8000;
+
+	WDFIdealRLCHPF rlchipass[2];
+
+	WDFIdealRLCHPF1pole wdfhipass[2];
+
+	WDFIdealRLCHighshelf wdfhishelf[2];
+
+	WDFSpeakerImp wdfimp[2];
 
 	// --- END USER VARIABLES AND FUNCTIONS -------------------------------------- //
 

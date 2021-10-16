@@ -1,4 +1,4 @@
-// -----------------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------------
 //    ASPiK Plugin Kernel File:  plugincore.cpp
 //
 /**
@@ -69,6 +69,30 @@ bool PluginCore::reset(ResetInfo& resetInfo)
     audioProcDescriptor.sampleRate = resetInfo.sampleRate;
     audioProcDescriptor.bitDepth = resetInfo.bitDepth;
 
+
+
+
+	wdfhipass[0].reset(getSampleRate());
+	wdfhipass[1].reset(getSampleRate());
+
+	wdfhishelf[0].reset(getSampleRate());
+	wdfhishelf[1].reset(getSampleRate());
+
+	rlchipass[0].reset(getSampleRate());
+	rlchipass[1].reset(getSampleRate());
+
+	WDFParameters par;
+	par.fc = 5; //5HZ
+
+	wdfhipass[0].setParameters(par);
+	wdfhipass[1].setParameters(par);
+
+	par.fc = 800;
+	par.boostCut_dB = -10.;// inputgain_p;
+
+	wdfhishelf[0].setParameters(par);
+	wdfhishelf[1].setParameters(par);
+
     // --- other reset inits
     return PluginBase::reset(resetInfo);
 }
@@ -82,6 +106,14 @@ Operation:
 bool PluginCore::initialize(PluginInfo& pluginInfo)
 {
 	// --- add one-time init stuff here
+
+//	wdfhipass[0].createWDF();
+//	wdfhipass[1].createWDF();
+
+//	wdfhishelf[0].createWDF();
+//	wdfhishelf[1].createWDF();
+
+	wdfimp[0].createWDF();
 
 	return true;
 }
@@ -106,13 +138,46 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
     //     want to use the auto-variable-binding
 
 
-	for (int i = 0; i < 2; i++) {
-		ups[i].setupN(.447 / oversampling_p, 55.);
-		dwn[i].setupN(.447 / oversampling_p, 55.);
+	if (oversampling_p != oversampling_pOld) {
+
+		for (int i = 0; i < 2; i++) {
+			ups[i].setupN(.45 / oversampling_p, 60.);
+			dwn[i].setupN(.45 / oversampling_p, 60.);
+		}
+
+		oversampling_pOld = oversampling_p;
 	}
 
-	ingainfactor  = pow(10.0, inputgain_p  * .05);
+	ingainfactor = pow(10.0, inputgain_p  * .05);
 	outgainfactor = pow(10.0, outputgain_p * .05);
+
+	WDFParameters para;
+	para.fc = hipasscutoff_p; //5HZ
+	
+	wdfhipass[0].setParameters(para);
+	wdfhipass[1].setParameters(para);
+
+	rlchipass[0].setParameters(para);
+	rlchipass[1].setParameters(para);
+
+	para.fc = 80.*alpha_p /getSampleRate();
+	para.boostCut_dB = ( inputgain_p  ) ;
+
+
+	wdfhishelf[0].setParameters(para);
+	wdfhishelf[1].setParameters(para);
+
+
+	Is = satcurrent_p * 0.000000001;   //sat curr
+	vt = thermalvoltage_p * 0.001;     //th volt
+	C = capacitor_p * 0.000000001;      //cap
+
+	c1 = 1. / resistor_p / C;
+	c2 = 2. * Is / C;
+	c3 = c2 / vt;
+	c4 = 1. / vt;
+
+	dccut = 1. - ((2*kPi*hipasscutoff_p )/ (getSampleRate())); //
 
     syncInBoundVariables();
 
@@ -164,7 +229,7 @@ bool PluginCore::processAudioFrame(ProcessFrameInfo& processFrameInfo)
     processFrameInfo.midiEventQueue->fireMidiEvents(processFrameInfo.currentFrame);
 
 	// --- do per-frame smoothing
-	doParameterSmoothing();
+//	doParameterSmoothing();
 
 	// --- call your GUI update/cooking function here, now that smoothing has occurred
 	//
@@ -262,7 +327,7 @@ bool PluginCore::preProcessAudioBlock(IMidiEventQueue* midiEventQueue)
 	//     functions (see updateParameters( ) in comment below) into the for( ) loop above
 	//     NOTE: smoothing only once per block usually SAVES CPU cycles
 	//           smoothing once per sample period usually EATS CPU cycles, potentially unnecessarily
-	doParameterSmoothing();
+//	doParameterSmoothing();
 
 	// --- call your GUI update/cooking function here, now that smoothing has occurred
 	//
@@ -278,37 +343,6 @@ bool PluginCore::preProcessAudioBlock(IMidiEventQueue* midiEventQueue)
 }
 
 
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//	--- BLOCK/BUFFER PROCESSING FUNCTION --- //
-/*
-This is where you do your DSP processing on a PER-BLOCK basis; this means that you are
-processing entire blocks at a time -- each audio channel has its own block to process.
-
-A BUFFER is simply a single block of audio that is the size of the incoming buffer from the
-DAW. A BLOCK is a sub-block portion of that buffer.
-
-In the event that the incoming buffer is SMALLER than your requested audio block, the
-entire buffer will be sent to this block processing function. This is also true when your
-block size is not a divisor of the actual incoming buffer, OR when an incoming buffer
-is partially filled (which is rare, but may happen under certain circumstances), resulting
-in a "partial block" of data that is smaller than your requested block size.
-
-NOTE:
-You can enable and disable frame/buffer procssing in the constructor of this object:
-
-// --- to process audio frames call:
-processAudioByFrames();
-
-// --- to process complete DAW buffers call:
-processAudioByBlocks(WANT_WHOLE_BUFFER);
-
-// --- to process sub-blocks of the incoming DAW buffer in 64 sample blocks call:
-processAudioByBlocks(DEFAULT_AUDIO_BLOCK_SIZE);
-
-// --- to process sub-blocks of size N, call:
-processAudioByBlocks(N);
-*/
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 /**
 \brief block or buffer-processing method
@@ -396,7 +430,7 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 	
 	double fs = getSampleRate() * oversampling_p;
 	double k = 1. / fs;
-	double halfk = k / 2.;
+	double halfk = k * .5;
 
 	// --- block processing -- write to outputs
 	for (uint32_t sample = blockInfo.blockStartIndex, i = 0;
@@ -406,55 +440,56 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		// --- handles multiple channels, but up to you for bookkeeping
 		for (uint32_t channel = 0; channel < blockInfo.numAudioOutChannels; channel++)
 		{
-			// --- pass through code, or your processed FX version
-
-
-			double Is = satcurrent_p * 0.000000001;   //sat curr
-			double vt = thermalvoltage_p;     //th volt
-			double C = capacitor_p * 0.000000001;      //cap
-			double R = resistor_p;        //res
-		
-			double a = alpha_p;			//free param
-			
-			double c1 = 1. / R / C;
-			double c2 = 2. * Is / C;
-			double c3 = c2 / vt;
-			double c4 = 1. / vt;
 
 			ingainsm  = ingainsm * .999 + 0.001 * ingainfactor;
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
 
-			double xin = blockInfo.inputs[channel][sample] * ingainsm;
+			double xin = blockInfo.inputs[channel][sample] * ingainsm * oversampling_p;
 
 			for (int i = 0; i < oversampling_p; i++) {
 
-				xin = xin * ( i == 0 ) * oversampling_p;   // zero stuffing
+				xin = xin * ( i == 0 ) ;   // zero stuff
 
 				xin = ups[channel].filter(xin); 
 
 				xin = c1 * xin;
 
-		 const double sh = sinh(c4 * x[channel]);
+				const double s1 = c4 * x[channel];
+
+		 const double sh = ( exp(s1) + exp(s1) ) * .5;   // sinh
 
 		 const double f = x[channel] * c1 + c2 * sh;
 				
 		 if (FastAbs(x[channel]) < 1e-13) { fx = c1 + c3; }
 				 else { fx = c1 + c2 * sh / x[channel]; }
 
-		// fx = c1 + c2 * sh / x[channel];
-		//		fx = fx + (FastAbs(x[channel]) < 1e-13) * (-fx + ( c1 + c3 ) ) ;   /fx is aready corrupted/crashes
 
 		const double fp = c3 * sqrt(1. + sh * sh) + c1;
-		const double sigma = a * k * fp;
-				x[channel] = ((1. + sigma)*x[channel] - 0.5*k*f + k * xin) / (1. + sigma + 0.5*k*fx);
+		const double sigma = alpha_p * k * fp;
+
+				x[channel] = ((1. + sigma) * x[channel] - halfk * f + k * xin) / (1. + sigma + halfk * fx);
 
 				xoutput[i] = dwn[channel].filter(x[channel]);
 			}
 
 
-	dcstate[channel] = dcblock[channel];
-	dcblock[channel] = xoutput[0] + dcblock[channel] * .9995;
-	xout = dcblock[channel] - dcstate[channel];
+	switch (hipass_p) {
+			case 0: {
+				xout = wdfhipass[channel].processAudioSample(-xoutput[0]);
+				break;
+			}
+			case 1: {
+					dcstate[channel] = dcblock[channel];
+					dcblock[channel] = xoutput[0] + dcblock[channel] * dccut;
+					xout = dcblock[channel] - dcstate[channel];
+					break;
+			}
+			case 2: {
+					xout = xoutput[0];
+				break;
+			}
+			default:  break; 
+}
 
 			blockInfo.outputs[channel][sample] = xout * outgainsm;
 		}
@@ -715,35 +750,44 @@ bool PluginCore::initPluginParameters()
 
 	PluginParameter* piParam = nullptr;
 
-	piParam = new PluginParameter(controlID::inputgain, "input gain", "DECIBELS", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::inputgain, "input gain", "dBs", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
 	piParam->setBoundVariable(&inputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::outputgain, "output gain", "DECIBELS", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::outputgain, "output gain", "dBs", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
 	piParam->setBoundVariable(&outputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::resistor, "resistance", "OHMS", controlVariableType::kDouble, 1., 10000., 1000., taper::kAntiLogTaper);
-	piParam->setBoundVariable(&resistor_p, boundVariableType::kDouble);
+	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 1., 10000., 1000., taper::kAntiLogTaper);
+	piParam->setBoundVariable(&resistor_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
 	piParam = new PluginParameter(controlID::alpha, "ALPHA", "", controlVariableType::kDouble, .5, 20., 5., taper::kLinearTaper);
 	piParam->setBoundVariable(&alpha_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::capacitor, "capacitor", "NANO FARADS", controlVariableType::kDouble, 0.033, 100, 33., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::capacitor, "capacitor", "nF", controlVariableType::kDouble, 0.033, 100, 33., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&capacitor_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::satcurrent, "saturationcurrent", "NANO AMPS", controlVariableType::kDouble, 0.00252, 25., 2.52, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::satcurrent, "saturationcurrent", "nA", controlVariableType::kDouble, 0.00252, 25., 2.52, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "AMPS", controlVariableType::kDouble, 0.026, 2.6, 0.026, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mA", controlVariableType::kDouble, 5, 1000, 26, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&thermalvoltage_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::oversampling, "oversampling", "x", controlVariableType::kInt, 1, 16, 4, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::hipasscutoff, "highpass freq", "Hz", controlVariableType::kDouble, 1, 200, 10, taper::kAntiLogTaper);
+	piParam->setBoundVariable(&hipasscutoff_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::hipass, "highpass freq", "WDF, Biquad, off", "WDF");
+	piParam->setBoundVariable(&hipass_p, boundVariableType::kInt);
+	piParam->setIsDiscreteSwitch(true);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::oversampling, "oversampling", "x", controlVariableType::kInt, 1, 32, 8, taper::kLinearTaper);
 	piParam->setBoundVariable(&oversampling_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
