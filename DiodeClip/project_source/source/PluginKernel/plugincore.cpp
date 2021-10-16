@@ -456,7 +456,7 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 				const double s1 = c4 * x[channel];
 
-		 const double sh = ( exp(s1) + exp(s1) ) * .5;   // sinh
+		 const double sh = ( exp(s1) - exp(-s1) ) * .5;   // sinh
 
 		 const double f = x[channel] * c1 + c2 * sh;
 				
