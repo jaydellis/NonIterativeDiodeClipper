@@ -11,8 +11,8 @@
 #define AU_COCOA_VIEW_STRING STR(AU_COCOA_VIEW_NAME)
 
 // --- AU Plugin Cocoa View Names (flat namespace) 
-#define AU_COCOA_VIEWFACTORY_NAME AUCocoaViewFactory_A64C5E8D85E63F74A8F498FABDFCA4CA
-#define AU_COCOA_VIEW_NAME AUCocoaView_A64C5E8D85E63F74A8F498FABDFCA4CA
+#define AU_COCOA_VIEWFACTORY_NAME AUCocoaViewFactory_BA464D50DA2B375EAC5AB3D6B0F06B60
+#define AU_COCOA_VIEW_NAME AUCocoaView_BA464D50DA2B375EAC5AB3D6B0F06B60
 
 // --- BUNDLE IDs (MacOS Only) 
 const char* kAAXBundleID = "developer.aax.diodeclip.bundleID";
@@ -49,7 +49,7 @@ inline static const char* getPluginDescBundleName()
 const pluginType kPluginType = pluginType::kFXPlugin;
 
 // --- VST3 UUID 
-const char* kVSTFUID = "{a64c5e8d-85e6-3f74-a8f4-98fabdfca4ca}";
+const char* kVSTFUID = "{ba464d50-da2b-375e-ac5a-b3d6b0f06b60}";
 
 // --- 4-char codes 
 const int32_t kFourCharCode = 'dclp';

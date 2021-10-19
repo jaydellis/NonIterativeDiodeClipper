@@ -1,12 +1,1 @@
-﻿  Building Custom Rule C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/public.sdk/CMakeLists.txt
-  connectionproxy.cpp
-  eventlist.cpp
-  hostclasses.cpp
-  module.cpp
-  parameterchanges.cpp
-  pluginterfacesupport.cpp
-  processdata.cpp
-  stringconvert.cpp
-  vstinitiids.cpp
-  Generating Code...
-  sdk_hosting.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\sdk_hosting.lib
+﻿  sdk_hosting.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\sdk_hosting.lib

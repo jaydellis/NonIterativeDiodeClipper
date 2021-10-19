@@ -13,6 +13,11 @@
 #include "plugincore.h"
 #include "plugindescription.h"
 
+#include <iostream>
+#include <fstream>
+
+
+
 /**
 \brief PluginCore constructor is launching pad for object initialization
 
@@ -71,7 +76,6 @@ bool PluginCore::reset(ResetInfo& resetInfo)
 
 
 
-
 	wdfhipass[0].reset(getSampleRate());
 	wdfhipass[1].reset(getSampleRate());
 
@@ -106,14 +110,27 @@ Operation:
 bool PluginCore::initialize(PluginInfo& pluginInfo)
 {
 	// --- add one-time init stuff here
+	dwn[0].setupN(.45 / oversampling_p, 60.);
 
-//	wdfhipass[0].createWDF();
+	dwnn[0].setparams(dwn[0].getCascadeStorage());
+	dwnn[1].setparams(dwn[0].getCascadeStorage());
+	upss[0].setparams(dwn[0].getCascadeStorage());
+	upss[1].setparams(dwn[0].getCascadeStorage());
+
+	for (int i = 0; i < 100; i++) {  
+		dwnn[0].process(0.);
+		dwnn[1].process(0.);
+		upss[0].process(0.);
+		upss[1].process(0.);
+	}
+
+//	wdfhipass[0].createWDF(); 
 //	wdfhipass[1].createWDF();
 
 //	wdfhishelf[0].createWDF();
 //	wdfhishelf[1].createWDF();
 
-	wdfimp[0].createWDF();
+//	wdfimp[0].createWDF();
 
 	return true;
 }
@@ -143,12 +160,51 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 		for (int i = 0; i < 2; i++) {
 			ups[i].setupN(.45 / oversampling_p, 60.);
 			dwn[i].setupN(.45 / oversampling_p, 60.);
+
+			dwnn[i].setparams(dwn[0].getCascadeStorage());
+			upss[i].setparams(dwn[0].getCascadeStorage());
 		}
 
 		oversampling_pOld = oversampling_p;
 	}
 
-	ingainfactor = pow(10.0, inputgain_p  * .05);
+/*
+	auto bq = dwnn[0].upss.getCascadeStorage();
+
+	auto arr = bq.stageArray; 
+	int maxstages = bq.maxStages;
+
+
+	std::ofstream myfile;
+	myfile.open("zcoeffs.txt");
+
+	for (int i = 0; i < maxstages; i++) {
+		auto A0 = arr[ i ].getA0();
+		auto A1 = arr[ i ].getA1();
+		auto A2 = arr[ i ].getA2();
+		auto B0 = arr[ i ].getB0();
+		auto B1 = arr[ i ].getB1();
+		auto B2 = arr[ i ].getB2();
+
+		myfile << "\n";
+		myfile << "A0 ";
+		myfile << A0;
+		myfile << " A1 ";
+		myfile << A1;
+		myfile << " A2 ";
+		myfile << A2;
+		myfile << " b0 ";
+		myfile << B0;
+		myfile << " b1 ";
+		myfile << B1;
+		myfile << " b2 ";
+		myfile << B2;
+	}
+
+	myfile.close();
+	*/
+
+	ingainfactor  = pow(10.0, inputgain_p  * .05);
 	outgainfactor = pow(10.0, outputgain_p * .05);
 
 	WDFParameters para;
@@ -168,16 +224,23 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 	wdfhishelf[1].setParameters(para);
 
 
-	Is = satcurrent_p * 0.000000001;   //sat curr
+	Is = satcurrent_p * 0.000000000001;   // sat curr
 	vt = thermalvoltage_p * 0.001;     //th volt
 	C = capacitor_p * 0.000000001;      //cap
 
-	c1 = 1. / resistor_p / C;
+	c1 = 1. /  resistor_p / C ;
 	c2 = 2. * Is / C;
 	c3 = c2 / vt;
 	c4 = 1. / vt;
 
-	dccut = 1. - ((2*kPi*hipasscutoff_p )/ (getSampleRate())); //
+	_c1 =  _mm_set1_pd(c1);
+	_c2 =  _mm_set1_pd(c2);
+	_c3 =  _mm_set1_pd(c3);
+	_c4 =  _mm_set1_pd(c4);
+
+	dccut = 1. - ((2.*kPi*hipasscutoff_p )/ (getSampleRate())); //
+
+	oversampsampinv = 1./oversampling_p;
 
     syncInBoundVariables();
 
@@ -320,25 +383,6 @@ bool PluginCore::preProcessAudioBlock(IMidiEventQueue* midiEventQueue)
 		if (midiEventQueue)
 			midiEventQueue->fireMidiEvents(sample);
 	}
-
-	// --- this will do parameter smoothing ONLY ONCE AT THE TOP OF THE BLOCK PROCESSING
-	//
-	// --- to perform per-sample parameter smoothing, move this line of code, AND your updating
-	//     functions (see updateParameters( ) in comment below) into the for( ) loop above
-	//     NOTE: smoothing only once per block usually SAVES CPU cycles
-	//           smoothing once per sample period usually EATS CPU cycles, potentially unnecessarily
-//	doParameterSmoothing();
-
-	// --- call your GUI update/cooking function here, now that smoothing has occurred
-	//
-	//     NOTE:
-	//     updateParameters is the name used in Will Pirkle's books for the GUI update function
-	//     you may name it what you like - this is where GUI control values are cooked
-	//     for the DSP algorithm at hand
-	//     NOTE: updating (cooking) only once per block usually SAVES CPU cycles
-	//           updating (cooking) once per sample period usually EATS CPU cycles, potentially unnecessarily
-	// updateParameters();
-
 	return true;
 }
 
@@ -426,76 +470,219 @@ Operation:
 */
 bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 {
-	RCH::Undenormal noDenomals;
+	RCH::Undenormal noDenormals;
 	
-	double fs = getSampleRate() * oversampling_p;
-	double k = 1. / fs;
-	double halfk = k * .5;
+	const double fs = getSampleRate() * oversampling_p;
+	const double k = 1. / fs;
+	const double halfk = k * .5;
+	const double alphak = alpha_p * k;
+
+	const __m128d _fs = _mm_set1_pd(fs);
+	const __m128d _k = _mm_set1_pd(k);
+	const __m128d _halfk = _mm_set1_pd(halfk);
+	const __m128d _alphak = _mm_set1_pd(alphak);
 
 	// --- block processing -- write to outputs
 	for (uint32_t sample = blockInfo.blockStartIndex, i = 0;
 		sample < blockInfo.blockStartIndex + blockInfo.blockSize;
 		sample++, i++)
 	{
-		// --- handles multiple channels, but up to you for bookkeeping
-		for (uint32_t channel = 0; channel < blockInfo.numAudioOutChannels; channel++)
-		{
 
-			ingainsm  = ingainsm * .999 + 0.001 * ingainfactor;
+	if( sse_p == 1)
+		{
+			ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
 
-			double xin = blockInfo.inputs[channel][sample] * ingainsm * oversampling_p;
+			double xin = blockInfo.inputs[0][sample] * ingainsm * oversampling_p + .5;
+			double xinr = blockInfo.inputs[1][sample] * ingainsm * oversampling_p + .5;
 
-			for (int i = 0; i < oversampling_p; i++) {
+			double inp[2];
+			inp[0] = xin, inp[1] = xinr;
+			//	xin = fmin(fmax(xin, -12), 12);
 
-				xin = xin * ( i == 0 ) ;   // zero stuff
+			intin[4][0] = intin[3][0];
+			intin[3][0] = intin[2][0];
+			intin[2][0] = intin[1][0];
+			intin[1][0] = intin[0][0];
+			intin[0][0] = xin;
 
-				xin = ups[channel].filter(xin); 
+			__m128d _xin = _mm_load_pd(inp);
+			intxin[3][0] = intxin[2][0];
+			intxin[2][0] = intxin[1][0];
+			intxin[1][0] = intxin[0][0];
+			intxin[0][0] = _mm_set1_pd(xin / oversampling_p);
 
-				xin = c1 * xin;
+			//		scrm->ssecatmullset(intxin[3][0], intxin[2][0], intxin[1][0], intxin[0][0]);
 
-				const double s1 = c4 * x[channel];
+			__m128d _xinfll[32] = { _mm_set1_pd(0.) };
+			_xinfll[0] = _xin;
+			double xinfll[32] = { 0. };
+			xinfll[0] = xin;
 
-		 const double sh = ( exp(s1) - exp(-s1) ) * .5;   // sinh
+			for (int i = 0; i < oversampling_p; i++) {							 // SSE
 
-		 const double f = x[channel] * c1 + c2 * sh;
-				
-		 if (FastAbs(x[channel]) < 1e-13) { fx = c1 + c3; }
-				 else { fx = c1 + c2 * sh / x[channel]; }
+			//	_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, scrm->ssecatmullproc(_mm_set1_pd(1. + double(i) * oversampsampinv))));
+
+				_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, upss[0].processSSE(_xinfll[i])));
+
+				const __m128d _s1 = _mm_mul_pd(_c4, _x[0]);
+				//				_s1 = _mm_max_pd(_mm_min_pd(_s1, _mm_set1_pd(80.)), _mm_set1_pd(-80.));  //88 limit? 
+
+							//	_mm_store1_pd(_xouts, _s1);
+							//	_xouts[0] = sinh(_xouts[0]); 
+							//	_xouts[1] = sinh(_xouts[1]);
+							//	const __m128d _sh = _mm_load_pd( _xouts);
+
+				__m128 cst = _mm_castpd_ps(_s1);
+				cst = BetterFastExpSse(cst);
+				const __m128d expo = _mm_castps_pd(cst);
+
+				cst = _mm_castpd_ps(_mm_mul_pd(_nunityd, _s1));
+				cst = BetterFastExpSse(cst);
+				const __m128d expoR = _mm_castps_pd(cst);
+
+				const __m128d _sh = _mm_mul_pd(_mm_sub_pd(expo, expoR), _halfd);
+
+				const __m128d _f = _mm_mul_pd(_halfk, _mm_add_pd(_mm_mul_pd(_x[0], _c1), _mm_mul_pd(_c2, _sh)));
 
 
-		const double fp = c3 * sqrt(1. + sh * sh) + c1;
-		const double sigma = alpha_p * k * fp;
+				_mm_store1_pd(_xouts, _mm_mul_pd(_x[0], _x[0]));
 
-				x[channel] = ((1. + sigma) * x[channel] - halfk * f + k * xin) / (1. + sigma + halfk * fx);
+				const __m128d dvzmsk = _mm_cmpgt_pd(_mm_mul_pd(_x[0], _x[0]), _mm_set1_pd(0.000001) );
 
-				xoutput[i] = dwn[channel].filter(x[channel]);
+	//			if ((_xouts[0] > .000001))
+				{
+					_fx = _mm_add_pd(_c1, _mm_mul_pd(_c2, _mm_div_pd(_sh, _x[0])));    //. TOfix
+				} 
+	//			else _fx = _mm_add_pd(_c1, _c3);
+
+				_fx = _mm_and_pd( dvzmsk, _fx);
+
+				const __m128d _fp = _mm_mul_pd(_c3, _mm_sqrt_pd(_mm_add_pd(_unityd, _mm_mul_pd(_sh, _sh))));
+				const __m128d _sigma = _mm_add_pd(_unityd, _mm_mul_pd(_alphak, _fp));
+
+				//		if (((_xouts[0] * _xouts[0]) > .000001)) {
+				_x[0] = _mm_div_pd(_mm_add_pd(_mm_sub_pd(_mm_mul_pd(_sigma, _x[0]), _f), _xin),
+					_mm_add_pd(_sigma, _mm_mul_pd(_halfk, _fx)));
+				//	}
+						_x[0] = _mm_max_pd(_mm_min_pd(_unityd, _x[0]), _nunityd);  // todo add release
+
+				_xoutput[i] = dwnn[0].processSSE(_x[0]);
+
 			}
 
+			_mm_store_pd(xoutput, _xoutput[0]);
 
-	switch (hipass_p) {
+			switch (hipass_p) {
 			case 0: {
-				xout = wdfhipass[channel].processAudioSample(-xoutput[0]);
+				xout = wdfhipass[0].processAudioSample(-xoutput[0]);
+				xoutR = wdfhipass[1].processAudioSample(-xoutput[1]);
 				break;
 			}
 			case 1: {
-					dcstate[channel] = dcblock[channel];
-					dcblock[channel] = xoutput[0] + dcblock[channel] * dccut;
-					xout = dcblock[channel] - dcstate[channel];
-					break;
-			}
-			case 2: {
-					xout = xoutput[0];
+				dcstate[0] = dcblock[0];
+				dcblock[0] = xoutput[0] + dcblock[0] * dccut;
+				xout = dcblock[0] - dcstate[0];
+
+				dcstate[1] = dcblock[1];
+				dcblock[1] = xoutput[1] + dcblock[1] * dccut;
+				xoutR = dcblock[1] - dcstate[1];
 				break;
 			}
-			default:  break; 
-}
+			case 2: {
+				xout = xoutput[0];
+				xoutR = xoutput[1];
+				break;
+			}
+			default:  break;
+			}
 
-			blockInfo.outputs[channel][sample] = xout * outgainsm;
-		}
+			blockInfo.outputs[0][sample] = (xout)* outgainsm;
+			blockInfo.outputs[1][sample] = (xoutR)* outgainsm;
+
+		} else 
+
+		
+			// --- handles multiple channels, but up to you for bookkeeping
+			for (uint32_t channel = 0; channel < blockInfo.numAudioOutChannels; channel++)
+			{
+				ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
+				outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
+
+				double xin = blockInfo.inputs[channel][sample] * ingainsm * oversampling_p;
+				//	xin = fmin(fmax(xin, -12), 12);
+
+				intin[7][channel] = intin[6][channel];
+				intin[6][channel] = intin[5][channel];
+				intin[5][channel] = intin[4][channel];
+				intin[4][channel] = intin[3][channel];
+				intin[3][channel] = intin[2][channel];
+				intin[2][channel] = intin[1][channel];
+				intin[1][channel] = intin[0][channel];
+				intin[0][channel] = xin;
+
+
+				double xinfll[32] = { 0. };
+				xinfll[0] = xin;
+
+				//todo check http://ijeais.org/wp-content/uploads/2018/07/IJAER180702.pdf exp
+
+			for (int i = 0; i < oversampling_p; i++) {   // c+
+
+				//		xin = k * c1 * lagrange3xx(intin[0][channel], intin[1][channel], intin[2][channel], intin[3][channel], 1. + i * oversampsampinv) * oversampsampinv;
+				//		xin = k * c1 * lagrange6xx(intin[7][channel], intin[6][channel], intin[5][channel], intin[4][channel], intin[3][channel], intin[2][channel], intin[1][channel], intin[0][channel], 3. + i * oversampsampinv, 0, 0) * oversampsampinv;
+
+				//		xin = k * c1 * catmull(intin[3][channel], intin[2][channel], intin[1][channel], intin[0][channel], double(i) * oversampsampinv) * oversampsampinv;
+					xin = k * c1 * upss[channel].processUnrolled8p( xinfll[i] );
+				//		xin = k * c1 * ups[channel].filter( xin * ( i < 1));
+
+			const double s1 = fmin(fmax(c4 * x[channel], -80.) ,80.);  //+-88 limit
+
+			const double sh = sinh(s1);
+
+			const double f = halfk * ((x[channel] * c1) + c2 * sh);
+
+					if ((x[channel] * x[channel]) > .000001) { fx = c1 + c2 * sh / x[channel]; }
+					else fx = c1 + c3;
+
+					const double fp = c3 * sqrt(1. + sh * sh) + c1;
+					const double sigma = 1. + alphak * fp;
+
+						x[channel] = ( sigma * x[channel] - f + xin) / ( sigma + halfk * fx);
+
+		//				xoutput[i] = dwn[channel].filter(x[channel]);
+						xoutput[i] = dwnn[channel].processUnrolled8p(x[channel]);
+			}
+
+		switch (hipass_p) {
+				case 0: {
+					xout = wdfhipass[channel].processAudioSample(-xoutput[0]);
+					break;
+				}
+				case 1: {
+						dcstate[channel] = dcblock[channel];
+						dcblock[channel] = xoutput[0] + dcblock[channel] * dccut;
+						xout = dcblock[channel] - dcstate[channel];
+						break;
+				}
+				case 2: {
+						xout = xoutput[0];
+					break;
+				}
+				default:  break;
+				}
+
+				blockInfo.outputs[channel][sample] = (xout) * outgainsm;
+			}
+		
+
+		
+
 	}
 	return true;
 }
+
+	   
 
 
 /**
@@ -758,23 +945,23 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&outputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 1., 10000., 1000., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 1., 8000., 500., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&resistor_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::alpha, "ALPHA", "", controlVariableType::kDouble, .5, 20., 5., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::alpha, "ALPHA", "", controlVariableType::kDouble, .0, 4., 1., taper::kLinearTaper);
 	piParam->setBoundVariable(&alpha_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::capacitor, "capacitor", "nF", controlVariableType::kDouble, 0.033, 100, 33., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::capacitor, "capacitor", "nF", controlVariableType::kDouble, 10, 60, 33., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&capacitor_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::satcurrent, "saturationcurrent", "nA", controlVariableType::kDouble, 0.00252, 25., 2.52, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::satcurrent, "current", "pA", controlVariableType::kDouble, 2.52, 1000., 252, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mA", controlVariableType::kDouble, 5, 1000, 26, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 10, 50, 26, taper::kLinearTaper);
 	piParam->setBoundVariable(&thermalvoltage_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -789,6 +976,10 @@ bool PluginCore::initPluginParameters()
 
 	piParam = new PluginParameter(controlID::oversampling, "oversampling", "x", controlVariableType::kInt, 1, 32, 8, taper::kLinearTaper);
 	piParam->setBoundVariable(&oversampling_p, boundVariableType::kInt);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::ssecontrol, "sse", "x", controlVariableType::kInt, 0, 1, 1, taper::kLinearTaper);
+	piParam->setBoundVariable(&sse_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
 	// **--0xEDA5--**

@@ -1,7 +1,1 @@
-﻿  Building Custom Rule C:/ASPiK_1.7.2/ALL_SDK/myprojects/DiodeClip/cmake/vst_cmake/CMakeLists.txt
-  vst3groupcontroller.cpp
-  vst3padcontroller.cpp
-  vst3editor.cpp
-  vstguieditor.cpp
-  Generating Code...
-  vstgui_support.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\vstgui_support.lib
+﻿  vstgui_support.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\vstgui_support.lib

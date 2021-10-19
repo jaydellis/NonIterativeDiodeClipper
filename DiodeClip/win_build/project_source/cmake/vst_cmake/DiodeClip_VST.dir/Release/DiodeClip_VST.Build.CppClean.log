@@ -10,6 +10,7 @@ c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_c
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\plugingui.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\plugincore.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\pluginbase.obj
+c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\fxobjects.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\rbj.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\polefilter.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\custom.obj
@@ -18,7 +19,6 @@ c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_c
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\cascade.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\butterworth.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\biquad.obj
-c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\diodeclip_vst.dir\release\fxobjects.obj
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\project_source\cmake\vst_cmake\cmakefiles\generate.stamp
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\lib\release\diodeclip_vst.lib
 c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\win_build\lib\release\diodeclip_vst.exp

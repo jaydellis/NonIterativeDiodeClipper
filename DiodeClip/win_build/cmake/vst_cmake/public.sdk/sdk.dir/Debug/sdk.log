@@ -1,17 +1,1 @@
-﻿  Building Custom Rule C:/ASPiK_1.7.2/ALL_SDK/VST_SDK/VST3_SDK/public.sdk/CMakeLists.txt
-  pluginview.cpp
-  pluginfactory.cpp
-  moduleinit.cpp
-  stringconvert.cpp
-  vst2persistence.cpp
-  vstaudioeffect.cpp
-  vstbus.cpp
-  vstcomponent.cpp
-  vstcomponentbase.cpp
-  vsteditcontroller.cpp
-  vstinitiids.cpp
-  vstnoteexpressiontypes.cpp
-  vstparameters.cpp
-  vstrepresentation.cpp
-  Generating Code...
-  sdk.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\sdk.lib
+﻿  sdk.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\lib\Debug\sdk.lib

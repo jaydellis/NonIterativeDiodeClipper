@@ -319,7 +319,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\filters.h" />
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\fxobjects.h" />
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\Iir.h" />
     <ClInclude Include="..\..\..\..\project_source\source\PluginObjects\iir\Biquad.h" />
