@@ -158,11 +158,11 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 	if (oversampling_p != oversampling_pOld) {
 
 		for (int i = 0; i < 2; i++) {
-			ups[i].setupN(.45 / oversampling_p, 60.);
-			dwn[i].setupN(.45 / oversampling_p, 60.);
+			ups[i].setupN(.47 / oversampling_p, 60.);
+			dwn[i].setupN(.47 / oversampling_p, 60.);
 
 			dwnn[i].setparams(dwn[0].getCascadeStorage());
-			upss[i].setparams(dwn[0].getCascadeStorage());
+			upss[i].setparams(ups[0].getCascadeStorage());
 		}
 
 		oversampling_pOld = oversampling_p;
@@ -490,21 +490,15 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 	if( sse_p == 1)
 		{
-			ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
+			ingainsm  = ingainsm * .999 + 0.001 * ingainfactor;
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
+			assym_sm = assym_sm * .999 + 0.001 * ( assym_p );
+			const __m128d assym_d = _mm_set1_pd( 1. - assym_sm);
 
-			double xin = blockInfo.inputs[0][sample] * ingainsm * oversampling_p + .5;
-			double xinr = blockInfo.inputs[1][sample] * ingainsm * oversampling_p + .5;
+			const double xin  = ( blockInfo.inputs[0][sample] * ingainsm  )* oversampling_p ;
+			const double xinr = ( blockInfo.inputs[1][sample] * ingainsm  )* oversampling_p ;
 
-			double inp[2];
-			inp[0] = xin, inp[1] = xinr;
-			//	xin = fmin(fmax(xin, -12), 12);
-
-			intin[4][0] = intin[3][0];
-			intin[3][0] = intin[2][0];
-			intin[2][0] = intin[1][0];
-			intin[1][0] = intin[0][0];
-			intin[0][0] = xin;
+			const double inp[2] = { xin, xinr };
 
 			__m128d _xin = _mm_load_pd(inp);
 			intxin[3][0] = intxin[2][0];
@@ -516,56 +510,47 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 			__m128d _xinfll[32] = { _mm_set1_pd(0.) };
 			_xinfll[0] = _xin;
-			double xinfll[32] = { 0. };
-			xinfll[0] = xin;
 
 			for (int i = 0; i < oversampling_p; i++) {							 // SSE
 
-			//	_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, scrm->ssecatmullproc(_mm_set1_pd(1. + double(i) * oversampsampinv))));
+			//	_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, scrm->ssecatmullproc(_mm_set1_pd(  double(i) * oversampsampinv))));
 
 				_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, upss[0].processSSE(_xinfll[i])));
 
 				const __m128d _s1 = _mm_mul_pd(_c4, _x[0]);
 				//				_s1 = _mm_max_pd(_mm_min_pd(_s1, _mm_set1_pd(80.)), _mm_set1_pd(-80.));  //88 limit? 
 
-							//	_mm_store1_pd(_xouts, _s1);
-							//	_xouts[0] = sinh(_xouts[0]); 
-							//	_xouts[1] = sinh(_xouts[1]);
-							//	const __m128d _sh = _mm_load_pd( _xouts);
-
 				__m128 cst = _mm_castpd_ps(_s1);
 				cst = BetterFastExpSse(cst);
 				const __m128d expo = _mm_castps_pd(cst);
 
-				cst = _mm_castpd_ps(_mm_mul_pd(_nunityd, _s1));
+				cst = _mm_castpd_ps(_mm_mul_pd( ( _mm_mul_pd(_nunityd, _s1)),  assym_d  ) );
 				cst = BetterFastExpSse(cst);
-				const __m128d expoR = _mm_castps_pd(cst);
+				const __m128d expoR = _mm_castps_pd(cst) ;
 
 				const __m128d _sh = _mm_mul_pd(_mm_sub_pd(expo, expoR), _halfd);
 
-				const __m128d _f = _mm_mul_pd(_halfk, _mm_add_pd(_mm_mul_pd(_x[0], _c1), _mm_mul_pd(_c2, _sh)));
+				const __m128d _f = _mm_mul_pd( _halfk, _mm_add_pd( _mm_mul_pd(_x[0], _c1), _mm_mul_pd(_c2, _sh)));
 
 
 				_mm_store1_pd(_xouts, _mm_mul_pd(_x[0], _x[0]));
-
-				const __m128d dvzmsk = _mm_cmpgt_pd(_mm_mul_pd(_x[0], _x[0]), _mm_set1_pd(0.000001) );
+				
+				const __m128d dvzmsk = _mm_cmpgt_pd(_mm_mul_pd(_x[0], _x[0]), _sqfperror );
 
 	//			if ((_xouts[0] > .000001))
-				{
-					_fx = _mm_add_pd(_c1, _mm_mul_pd(_c2, _mm_div_pd(_sh, _x[0])));    //. TOfix
-				} 
+					_fx = _mm_add_pd(_c1, _mm_mul_pd(_c2, _mm_div_pd(_sh, _x[0])));    
 	//			else _fx = _mm_add_pd(_c1, _c3);
 
-				_fx = _mm_and_pd( dvzmsk, _fx);
+				_fx = _mm_add_pd( _mm_and_pd(dvzmsk, _fx), _mm_andnot_pd(dvzmsk, _mm_add_pd(_c1, _c3)) );
 
 				const __m128d _fp = _mm_mul_pd(_c3, _mm_sqrt_pd(_mm_add_pd(_unityd, _mm_mul_pd(_sh, _sh))));
 				const __m128d _sigma = _mm_add_pd(_unityd, _mm_mul_pd(_alphak, _fp));
 
-				//		if (((_xouts[0] * _xouts[0]) > .000001)) {
 				_x[0] = _mm_div_pd(_mm_add_pd(_mm_sub_pd(_mm_mul_pd(_sigma, _x[0]), _f), _xin),
 					_mm_add_pd(_sigma, _mm_mul_pd(_halfk, _fx)));
-				//	}
-						_x[0] = _mm_max_pd(_mm_min_pd(_unityd, _x[0]), _nunityd);  // todo add release
+
+						_x[0] = _mm_max_pd(_mm_min_pd(_unityd, _x[0]), _nunityd);  // safety // TODO add release
+
 
 				_xoutput[i] = dwnn[0].processSSE(_x[0]);
 
@@ -608,8 +593,9 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			{
 				ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
 				outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
+				assym_sm = assym_sm * .999 + 0.001 * assym_p;
 
-				double xin = blockInfo.inputs[channel][sample] * ingainsm * oversampling_p;
+				double xin = ( blockInfo.inputs[channel][sample] * ingainsm  + assym_sm ) * oversampling_p ;
 				//	xin = fmin(fmax(xin, -12), 12);
 
 				intin[7][channel] = intin[6][channel];
@@ -636,7 +622,8 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 					xin = k * c1 * upss[channel].processUnrolled8p( xinfll[i] );
 				//		xin = k * c1 * ups[channel].filter( xin * ( i < 1));
 
-			const double s1 = fmin(fmax(c4 * x[channel], -80.) ,80.);  //+-88 limit
+			const double s1 = fmin(fmax(c4 * x[channel], -85.) ,85.);  //+-88 limit
+	//		const double s1 = c4 * x[channel];
 
 			const double sh = sinh(s1);
 
@@ -648,10 +635,14 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 					const double fp = c3 * sqrt(1. + sh * sh) + c1;
 					const double sigma = 1. + alphak * fp;
 
-						x[channel] = ( sigma * x[channel] - f + xin) / ( sigma + halfk * fx);
+					if (FastAbs(sigma + halfk * fx) > 0.00000001) {
+						x[channel] = (sigma * x[channel] - f + xin) / (sigma + halfk * fx);
+					}
 
 		//				xoutput[i] = dwn[channel].filter(x[channel]);
 						xoutput[i] = dwnn[channel].processUnrolled8p(x[channel]);
+
+						x[channel] = fmin(fmax(x[channel], -1.), 1.);	//safety shouldn't hit
 			}
 
 		switch (hipass_p) {
@@ -957,7 +948,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&capacitor_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::satcurrent, "current", "pA", controlVariableType::kDouble, 2.52, 1000., 252, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::satcurrent, "current", "pA", controlVariableType::kDouble, 2.52, 250., 25, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -974,8 +965,13 @@ bool PluginCore::initPluginParameters()
 	piParam->setIsDiscreteSwitch(true);
 	addPluginParameter(piParam);
 
+	piParam = new PluginParameter(controlID::assymetry, "assym", " x", controlVariableType::kDouble, 0, 1., 0., taper::kLinearTaper);
+	piParam->setBoundVariable(&assym_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
 	piParam = new PluginParameter(controlID::oversampling, "oversampling", "x", controlVariableType::kInt, 1, 32, 8, taper::kLinearTaper);
 	piParam->setBoundVariable(&oversampling_p, boundVariableType::kInt);
+	piParam->setIsDiscreteSwitch(true);
 	addPluginParameter(piParam);
 
 	piParam = new PluginParameter(controlID::ssecontrol, "sse", "x", controlVariableType::kInt, 0, 1, 1, taper::kLinearTaper);

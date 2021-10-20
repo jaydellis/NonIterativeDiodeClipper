@@ -34,10 +34,9 @@ enum controlID {
 	thermalvoltage = 6,
 	hipass = 7,
 	hipasscutoff = 8,
-	reserved2 = 9,
+	assymetry = 9,
 	oversampling = 10,
 	ssecontrol = 11
-
 
 };
 
@@ -597,6 +596,9 @@ __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/470253
 	double thermalvoltage_p = 0.026;
 	double satcurrent_p = 0.00000000252;
 
+	double assym_p = 0.0;
+	double assym_sm = 0.0;
+
 	double fx = 0.0001;
 
 	double intin[8][2] = { 0. };
@@ -613,6 +615,10 @@ __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/470253
 	const __m128d _nunityd = _mm_set1_pd(-1.);
 	const __m128d _zerod = _mm_set1_pd( 0.);
 	const __m128d _halfd = _mm_set1_pd(0.5);
+	const __m128d _sqfperror = { _mm_set1_pd(0.000001) };
+
+	const __m128d _dunityd = _mm_set1_pd(2.);
+	const __m128d _dnunityd = _mm_set1_pd(-2.);
 
 	__m128d _c1 = _mm_set1_pd( 0.1 );
 	__m128d _c2 = _mm_set1_pd( 0.1 );
