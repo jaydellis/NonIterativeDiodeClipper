@@ -1,4 +1,82 @@
-﻿  [SMTG] Copied ../../resources/PluginGUI.uidesc to C:/ASPiK_1.7.2/ALL_SDK/myprojects/DiodeClip/win_build/VST3/Debug/DiodeClip_VST.vst3/Contents/Resources
+﻿  customviews.cpp
+c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\project_source\source\customcontrols\../PluginKernel/pluginstructures.h(1089): warning C4267: 'return': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(286): warning C4189: 'max': local variable is initialized but not referenced
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(361): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(369): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(373): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(385): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(389): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(450): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(451): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(503): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(504): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(328): warning C4189: 'ntmp': local variable is initialized but not referenced
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(336): warning C4189: 'width': local variable is initialized but not referenced
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(333): warning C4189: 'colaudio': local variable is initialized but not referenced
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(329): warning C4189: 'ntmp1': local variable is initialized but not referenced
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(335): warning C4189: 'ptmp': local variable is initialized but not referenced
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\CustomControls\customviews.cpp(331): warning C4189: 'normalized': local variable is initialized but not referenced
+  plugincore.cpp
+c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\project_source\source\pluginkernel\pluginstructures.h(1089): warning C4267: 'return': conversion from 'size_t' to 'uint32_t', possible loss of data
+c:\aspik_1.7.2\all_sdk\myprojects\diodeclip\project_source\source\pluginobjects\iir/Common.h(50): warning C4005: '_CRT_SECURE_NO_WARNINGS': macro redefinition
+  C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp: note: see previous definition of '_CRT_SECURE_NO_WARNINGS'
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(334): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(651): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(652): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(743): warning C4018: '<=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(745): warning C4018: '>': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(745): warning C4018: '<': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(758): warning C4018: '>=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(760): warning C4018: '>': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(760): warning C4018: '<': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(773): warning C4018: '>=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(773): warning C4018: '<=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(775): warning C4018: '>': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(775): warning C4018: '<': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(777): warning C4018: '>': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(777): warning C4018: '<': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(1090): warning C4018: '<': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(1112): warning C4018: '>=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(1132): warning C4018: '>=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(2790): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(2841): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(2844): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(2997): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(3355): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(4892): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(4895): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(4896): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(9014): warning C4018: '<': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginObjects\fxobjects.h(9018): warning C4018: '<=': signed/unsigned mismatch
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(590): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(591): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(671): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(697): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(698): warning C4244: 'argument': conversion from 'double' to 'const T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(699): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(700): warning C4244: 'argument': conversion from 'double' to 'const T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(701): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(702): warning C4244: 'argument': conversion from 'double' to 'const T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(703): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\project_source\source\PluginKernel\plugincore.cpp(704): warning C4244: 'argument': conversion from 'double' to 'const T', possible loss of data
+          with
+          [
+              T=float
+          ]
+  Generating Code...
+  [SMTG] Copied ../../resources/PluginGUI.uidesc to C:/ASPiK_1.7.2/ALL_SDK/myprojects/DiodeClip/win_build/VST3/Debug/DiodeClip_VST.vst3/Contents/Resources
   DiodeClip_VST.vcxproj -> C:\ASPiK_1.7.2\ALL_SDK\myprojects\DiodeClip\win_build\VST3\Debug\DiodeClip_VST.vst3\Contents\x86_64-win\DiodeClip_VST.vst3
   [SMTG] Copy PlugIn.ico and desktop.ini and change their attributes.		[SMTG] Copy PlugIn.ico and desktop.ini and change their attributes.
   [SMTG] Validator started...

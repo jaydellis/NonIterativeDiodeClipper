@@ -1826,6 +1826,13 @@ CView* PluginGUI::createUserCustomView(std::string viewname, const CRect rect, I
 #endif
 	}
 
+
+	if (viewname.compare("View2") == 0)
+	{
+		return new SpectrumView2(rect, listener, tag);
+
+	}
+
 	return nullptr;
 }
 

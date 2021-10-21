@@ -208,7 +208,7 @@ const float ENVELOPE_ANALOG_TC = -1.0023934309275667804345424248947; ///< ln(36.
 /** @GUITiming
 \ingroup Constants-Enums @{*/
 // ---
-const float GUI_METER_UPDATE_INTERVAL_MSEC = 50.f;	///< repaint interval; larger = slower
+const float GUI_METER_UPDATE_INTERVAL_MSEC = 30.f;	///< repaint interval; larger = slower
 const float GUI_METER_MIN_DB = -60.f;				///< min GUI value in dB
 /** @} */
 

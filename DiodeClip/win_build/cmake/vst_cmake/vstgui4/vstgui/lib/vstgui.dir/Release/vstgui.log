@@ -53,9 +53,9 @@
   cview.cpp
   cviewcontainer.cpp
   cvstguitimer.cpp
+  genericstringlistdatabrowsersource.cpp
 C:\ASPiK_1.7.2\ALL_SDK\myprojects\vstgui4\vstgui\lib\cview.cpp(1010): warning C4996: 'VSTGUI::Animation::Animator::addAnimation': was declared deprecated
   c:\aspik_1.7.2\all_sdk\myprojects\vstgui4\vstgui\lib\animation/animator.h(26): note: see declaration of 'VSTGUI::Animation::Animator::addAnimation'
-  genericstringlistdatabrowsersource.cpp
   pixelbuffer.cpp
   platformfactory.cpp
   fileresourceinputstream.cpp

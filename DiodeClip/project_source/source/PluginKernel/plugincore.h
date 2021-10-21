@@ -475,7 +475,7 @@ __m128d FastExpSsef(__m128d x) // https://stackoverflow.com/questions/47025373/f
 	return _mm_castps_pd(_mm_castsi128_ps(t));
 }
 
-__m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/47025373/fastest-implementation-of-the-natural-exponential-function-using-sse
+inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/47025373/fastest-implementation-of-the-natural-exponential-function-using-sse
 {
 	const __m128 a = _mm_set1_ps((1 << 22) / float( 0.69314718055994530942 ) );  // to get exp(x/2)
 	const __m128i b = _mm_set1_epi32(127 * (1 << 23));       // NB: zero shift!
@@ -566,8 +566,7 @@ __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/470253
 	double xout = 0.;
 	double xoutR = 0.;
 	double xoutput[32] = { 0. };
-	
-	double _xouts[2];
+
 	__m128d _xoutput[32] = { _mm_set1_pd( 0.) };
 
 	double x[8] = { 0. };
@@ -636,6 +635,34 @@ __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/470253
 	WDFIdealRLCHighshelf wdfhishelf[2];
 
 	WDFSpeakerImp wdfimp[2];
+
+
+	double zmiL = 0.0;
+	double zmiR = 0.;
+	double zmi2L = 0.0;
+	double zmi2R = 0.;
+
+	double envinmi, envinmiR = 0.1;
+	double envpolmi, envpolmiR = 0.1;
+	double envinmi2L, envinmi2R = 0.1;
+	double envpolmi2L, envpolmi2R = 0.1;
+
+	double rmsil = 0.01;
+	double rmsir = 0.01;
+	double rmsol = 0.01;
+	double rmsor = 0.01;
+
+	double relmi = (0.693147 / (300.0 * 0.001*48000.));
+	double rmse = 1.;
+
+	double viewoutput = 0.;
+
+	ICustomView* SpectrumView2 = nullptr;
+	moodycamel::ReaderWriterQueue<float, 8> customViewDataQueue;
+
+	std::atomic<bool> queueEnabler;		///< atomic bool for enabling/disabling the queue
+	bool isCustomViewDataQueueEnabled() const { return queueEnabler.load(std::memory_order_relaxed); }			///< set atomic variable with float
+	void enableCustomViewDataQueue(bool value) { queueEnabler.store(value, std::memory_order_relaxed); }	///< get atomic variable as float
 
 	// --- END USER VARIABLES AND FUNCTIONS -------------------------------------- //
 

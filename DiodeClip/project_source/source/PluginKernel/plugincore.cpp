@@ -97,6 +97,12 @@ bool PluginCore::reset(ResetInfo& resetInfo)
 	wdfhishelf[0].setParameters(par);
 	wdfhishelf[1].setParameters(par);
 
+
+	relmi = (0.693147 / (300.0 * 0.001*getSampleRate()));
+
+	//rms env time window 400ms
+	rmse = expf(-1. / (.001 * getSampleRate() * 400.));
+
     // --- other reset inits
     return PluginBase::reset(resetInfo);
 }
@@ -131,6 +137,8 @@ bool PluginCore::initialize(PluginInfo& pluginInfo)
 //	wdfhishelf[1].createWDF();
 
 //	wdfimp[0].createWDF();
+
+	relmi = (0.693147 / (300.0 * 0.001*getSampleRate()));
 
 	return true;
 }
@@ -216,7 +224,7 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 	rlchipass[0].setParameters(para);
 	rlchipass[1].setParameters(para);
 
-	para.fc = 80.*alpha_p /getSampleRate();
+	para.fc = 8000.*alpha_p ;
 	para.boostCut_dB = ( inputgain_p  ) ;
 
 
@@ -488,6 +496,9 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		sample++, i++)
 	{
 
+		double meterinl = blockInfo.inputs[0][sample];
+			double meterinr = blockInfo.inputs[1][sample];
+
 	if( sse_p == 1)
 		{
 			ingainsm  = ingainsm * .999 + 0.001 * ingainfactor;
@@ -531,10 +542,7 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 				const __m128d _sh = _mm_mul_pd(_mm_sub_pd(expo, expoR), _halfd);
 
 				const __m128d _f = _mm_mul_pd( _halfk, _mm_add_pd( _mm_mul_pd(_x[0], _c1), _mm_mul_pd(_c2, _sh)));
-
-
-				_mm_store1_pd(_xouts, _mm_mul_pd(_x[0], _x[0]));
-				
+	
 				const __m128d dvzmsk = _mm_cmpgt_pd(_mm_mul_pd(_x[0], _x[0]), _sqfperror );
 
 	//			if ((_xouts[0] > .000001))
@@ -582,36 +590,39 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			default:  break;
 			}
 
+//		xoutR = wdfhishelf->processAudioSample(-xoutR);
+
 			blockInfo.outputs[0][sample] = (xout)* outgainsm;
 			blockInfo.outputs[1][sample] = (xoutR)* outgainsm;
 
-		} else 
+	}
+	else
+	{
 
-		
-			// --- handles multiple channels, but up to you for bookkeeping
-			for (uint32_t channel = 0; channel < blockInfo.numAudioOutChannels; channel++)
-			{
-				ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
-				outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
-				assym_sm = assym_sm * .999 + 0.001 * assym_p;
+		// --- handles multiple channels, but up to you for bookkeeping
+		for (uint32_t channel = 0; channel < blockInfo.numAudioOutChannels; channel++)
+		{
+			ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
+			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
+			assym_sm = assym_sm * .999 + 0.001 * assym_p;
 
-				double xin = ( blockInfo.inputs[channel][sample] * ingainsm  + assym_sm ) * oversampling_p ;
-				//	xin = fmin(fmax(xin, -12), 12);
+			double xin = (blockInfo.inputs[channel][sample] * ingainsm + assym_sm) * oversampling_p;
+			//	xin = fmin(fmax(xin, -12), 12);
 
-				intin[7][channel] = intin[6][channel];
-				intin[6][channel] = intin[5][channel];
-				intin[5][channel] = intin[4][channel];
-				intin[4][channel] = intin[3][channel];
-				intin[3][channel] = intin[2][channel];
-				intin[2][channel] = intin[1][channel];
-				intin[1][channel] = intin[0][channel];
-				intin[0][channel] = xin;
+			intin[7][channel] = intin[6][channel];
+			intin[6][channel] = intin[5][channel];
+			intin[5][channel] = intin[4][channel];
+			intin[4][channel] = intin[3][channel];
+			intin[3][channel] = intin[2][channel];
+			intin[2][channel] = intin[1][channel];
+			intin[1][channel] = intin[0][channel];
+			intin[0][channel] = xin;
 
 
-				double xinfll[32] = { 0. };
-				xinfll[0] = xin;
+			double xinfll[32] = { 0. };
+			xinfll[0] = xin;
 
-				//todo check http://ijeais.org/wp-content/uploads/2018/07/IJAER180702.pdf exp
+			//todo check http://ijeais.org/wp-content/uploads/2018/07/IJAER180702.pdf exp
 
 			for (int i = 0; i < oversampling_p; i++) {   // c+
 
@@ -619,55 +630,81 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 				//		xin = k * c1 * lagrange6xx(intin[7][channel], intin[6][channel], intin[5][channel], intin[4][channel], intin[3][channel], intin[2][channel], intin[1][channel], intin[0][channel], 3. + i * oversampsampinv, 0, 0) * oversampsampinv;
 
 				//		xin = k * c1 * catmull(intin[3][channel], intin[2][channel], intin[1][channel], intin[0][channel], double(i) * oversampsampinv) * oversampsampinv;
-					xin = k * c1 * upss[channel].processUnrolled8p( xinfll[i] );
+				xin = k * c1 * upss[channel].processUnrolled8p(xinfll[i]);
 				//		xin = k * c1 * ups[channel].filter( xin * ( i < 1));
 
-			const double s1 = fmin(fmax(c4 * x[channel], -85.) ,85.);  //+-88 limit
-	//		const double s1 = c4 * x[channel];
+				const double s1 = fmin(fmax(c4 * x[channel], -85.), 85.);  //+-88 limit
+		//		const double s1 = c4 * x[channel];
 
-			const double sh = sinh(s1);
+				const double sh = sinh(s1);
 
-			const double f = halfk * ((x[channel] * c1) + c2 * sh);
+				const double f = halfk * ((x[channel] * c1) + c2 * sh);
 
-					if ((x[channel] * x[channel]) > .000001) { fx = c1 + c2 * sh / x[channel]; }
-					else fx = c1 + c3;
+				if ((x[channel] * x[channel]) > .000001) { fx = c1 + c2 * sh / x[channel]; }
+				else fx = c1 + c3;
 
-					const double fp = c3 * sqrt(1. + sh * sh) + c1;
-					const double sigma = 1. + alphak * fp;
+				const double fp = c3 * sqrt(1. + sh * sh) + c1;
+				const double sigma = 1. + alphak * fp;
 
-					if (FastAbs(sigma + halfk * fx) > 0.00000001) {
-						x[channel] = (sigma * x[channel] - f + xin) / (sigma + halfk * fx);
-					}
+				//		if (FastAbs(sigma + halfk * fx) > 0.00000001) {
+				x[channel] = (sigma * x[channel] - f + xin) / (sigma + halfk * fx);
+				//		}
 
-		//				xoutput[i] = dwn[channel].filter(x[channel]);
-						xoutput[i] = dwnn[channel].processUnrolled8p(x[channel]);
+			//				xoutput[i] = dwn[channel].filter(x[channel]);
+				xoutput[i] = dwnn[channel].processUnrolled8p(x[channel]);
 
-						x[channel] = fmin(fmax(x[channel], -1.), 1.);	//safety shouldn't hit
+				x[channel] = fmin(fmax(x[channel], -1.), 1.);	//safety shouldn't hit
 			}
 
-		switch (hipass_p) {
-				case 0: {
-					xout = wdfhipass[channel].processAudioSample(-xoutput[0]);
-					break;
-				}
-				case 1: {
-						dcstate[channel] = dcblock[channel];
-						dcblock[channel] = xoutput[0] + dcblock[channel] * dccut;
-						xout = dcblock[channel] - dcstate[channel];
-						break;
-				}
-				case 2: {
-						xout = xoutput[0];
-					break;
-				}
-				default:  break;
-				}
-
-				blockInfo.outputs[channel][sample] = (xout) * outgainsm;
+			switch (hipass_p) {
+			case 0: {
+				xout = wdfhipass[channel].processAudioSample(-xoutput[0]);
+				break;
 			}
-		
+			case 1: {
+				dcstate[channel] = dcblock[channel];
+				dcblock[channel] = xoutput[0] + dcblock[channel] * dccut;
+				xout = dcblock[channel] - dcstate[channel];
+				break;
+			}
+			case 2: {
+				xout = xoutput[0];
+				break;
+			}
+			default:  break;
+			}
 
-		
+			blockInfo.outputs[channel][sample] = (xout)* outgainsm;
+
+		} 
+		xoutR = blockInfo.inputs[1][sample]; // quick fix for stereo meter
+	}
+		//meters
+		{
+			envinmi = ( FastAbs( meterinl  * ingainsm)) - zmiL;  //meter in
+			envpolmi = ((envinmi > 0.0)) + ((envinmi < 0.0) * relmi);
+			zmiL = zmiL + (envinmi * envpolmi);
+
+			envinmiR = ( FastAbs( meterinr * ingainsm)) - zmiR;			// 1 was gainsm
+			envpolmiR = ((envinmiR > 0.0)) + ((envinmiR < 0.0) * relmi);
+			zmiR = zmiR + (envinmiR * envpolmiR);
+
+			envinmi2L = ( FastAbs( xout) * outgainsm) - zmi2L;
+			envpolmi2L = ((envinmi2L > 0.0)) + ((envinmi2L < 0.0) * relmi);
+			zmi2L = zmi2L + (envinmi2L * envpolmi2L);   //.00049
+
+			envinmi2R = ( FastAbs( xoutR ) * outgainsm) - zmi2R;
+			envpolmi2R = ((envinmi2R > 0.0)) + ((envinmi2R < 0.0) * relmi);
+			zmi2R = zmi2R + (envinmi2R * envpolmi2R);   //.00049				//meter out
+
+			rmsil = rmsil * rmse + (1. - rmse) * ((meterinl *  ingainsm) * ( meterinl *  ingainsm) );			//rms l	
+			rmsir = rmsir * rmse + (1. - rmse) * ((meterinr *  ingainsm) * (meterinr * ingainsm ) );			//rms r
+
+			rmsol = rmsol * rmse + (1. - rmse) * ((xout* outgainsm)  * (xout  * outgainsm));		//rms lout
+			rmsor = rmsor * rmse + (1. - rmse) * ((xoutR* outgainsm) * (xoutR * outgainsm));		//rms rout
+		}
+
+	//	if (isCustomViewDataQueueEnabled()) {	customViewDataQueue.enqueue(viewoutput);	}
 
 	}
 	return true;
@@ -688,6 +725,7 @@ Operation:
 */
 bool PluginCore::postProcessAudioBuffers(ProcessBufferInfo& processInfo)
 {
+
 	// --- update outbound variables; currently this is meter data only, but could be extended
 	//     in the future
 	updateOutBoundVariables();
@@ -829,26 +867,94 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 		// --- add customization appearance here
 	case PLUGINGUI_DIDOPEN:
 	{
+		enableCustomViewDataQueue(true);
 		return false;
 	}
 
 	// --- NULL pointers so that we don't accidentally use them
 	case PLUGINGUI_WILLCLOSE:
 	{
+		enableCustomViewDataQueue(false);
 		return false;
 	}
 
 	// --- update view; this will only be called if the GUI is actually open
 	case PLUGINGUI_TIMERPING:
 	{
+
+		if (isCustomViewDataQueueEnabled()) {
+
+			customViewDataQueue.enqueue(viewoutput);
+			viewoutput = 2. + (-20.f* log10f(fmin(zmiL *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+			viewoutput = 4. + (-20.f* log10f(fmin(zmiR *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+			viewoutput = 10. + (-20.f* log10f(fmin(zmi2L *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+			viewoutput = 12. + (-20.f* log10f(fmin(zmi2R *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+
+			viewoutput = 6. + (-20.* log10(fmin(sqrt(rmsil) *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+			viewoutput = 8. + (-20.* log10(fmin(sqrt(rmsir) *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+			viewoutput = 14. + (-20.* log10(fmin(sqrt(rmsol) *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);  
+			viewoutput = 16. + (-20.* log10(fmin(sqrt(rmsor) *.0625, 0.999)))*.001;
+			customViewDataQueue.enqueue(viewoutput);
+	
+		}
+
+
+		if (SpectrumView2)
+		{
+			float audioSample = 0.0;
+
+			// --- try to get a value from queue
+			bool success = customViewDataQueue.try_dequeue(audioSample);
+
+			// --- if succeeds:
+			if (success)
+			{
+				// --- empty queue into views; the each handle this differently
+				while (success)
+				{
+			
+					if (SpectrumView2)
+						SpectrumView2->pushDataValue(audioSample);
+
+					// -- try to get next value until queue is empty
+					success = customViewDataQueue.try_dequeue(audioSample);
+				}
+			}
+
+			// --- update and mark view as dirty
+
+			if (SpectrumView2)
+				SpectrumView2->updateView();
+
+			return true;
+		}
+
 		return false;
 	}
 
 	// --- register the custom view, grab the ICustomView interface
 	case PLUGINGUI_REGISTER_CUSTOMVIEW:
 	{
+		// --- decode name string
 
-		return false;
+		if (messageInfo.inMessageString.compare("View2") == 0)
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (SpectrumView2 != static_cast<ICustomView*>(messageInfo.inMessageData))
+				SpectrumView2 = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!SpectrumView2) return false;
+
+			// --- registered!
+			return true;
+		}
 	}
 
 	case PLUGINGUI_REGISTER_SUBCONTROLLER:

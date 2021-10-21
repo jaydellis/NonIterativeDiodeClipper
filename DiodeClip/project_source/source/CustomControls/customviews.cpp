@@ -15,6 +15,75 @@
 
 namespace VSTGUI {
 
+
+
+	float HueToRgb2(float p, float q, float t) {
+		if (t < 0.0f) t += 1.0f;
+		else if (t > 1.0f) t -= 1.0f;
+
+		if (t < .166666f) return p + (q - p) * 6.0f * t;
+		if (t < .5f) return q;
+		if (t < .666666f) return p + (q - p) * (.66666f - t) * 6.0f;
+		return p;
+	}
+
+	static  CColor HslToRgba2(float h, float s, float l, float alpha) {
+		float r, g, b;
+
+		//	if (s == 0.0f)
+		//		r = g = b = l;
+		//	else
+		{
+			float q = l < 0.5f ? l * (1.0f + s) : l + s - l * s;
+			float p = 2.0f * l - q;
+			r = HueToRgb2(p, q, h + .33333f);
+			g = HueToRgb2(p, q, h);
+			b = HueToRgb2(p, q, h - .33333f);
+		}
+
+		return CColor((int)(r * 255.f), (int)(g * 255.f), (int)(b * 255.f), (int)(alpha * 255.f));
+	}
+
+
+
+	template <class T>
+	inline T FastMax(const T& left, const T& right)
+	{
+		return left > right ? left : right;
+	}
+
+	template <class T>
+	inline T FastMin(const T& left, const T& right)
+	{
+		return left < right ? left : right;
+	}
+
+
+	template <class T>			//by me
+	inline T FastAbs(const T& x) {
+		T a = (x > 0.);
+
+		return a * x + (-1. + a) * x;
+	}
+
+
+	inline float log2f_app(float X) {     ////http://openaudio.blogspot.com/2017/02/faster-log10-and-pow.html
+		float Y, F;
+		int E;
+		F = frexpf(fabsf(X), &E);
+		Y = 1.23149591368684f;
+		Y *= F;
+		Y += -4.11852516267426f;
+		Y *= F;
+		Y += 6.02197014179219f;
+		Y *= F;
+		Y += -3.13396450166353f;
+		Y += E;
+		return(Y);
+	}
+
+
+
 /**
 \brief WaveView constructor
 
@@ -167,6 +236,395 @@ void WaveView::draw(CDrawContext* pContext)
             index = circularBufferLength - 1;
     }
 }
+
+
+
+
+SpectrumView2::SpectrumView2(const VSTGUI::CRect& size, IControlListener* listener, int32_t tag)
+	: CControl(size, listener, tag)
+{
+
+	circularBuffer3 = new double[512];//(int)size.getWidth()];
+
+// --- init
+	writeIndex3 = 0;
+	readIndex3 = 0;
+	circularBufferLength3 = 9; //(int)size.getWidth();  /								///// must be length + 1
+	memset(circularBuffer3, 0, 9 * sizeof(double));  // circularBufferLength*sizeof(double));
+	currentRect3 = size;
+
+	// --- ICustomView
+	// --- create our incoming data-queue
+	dataQueue3 = new moodycamel::ReaderWriterQueue<double, 512>;
+
+}
+
+SpectrumView2::~SpectrumView2()
+{
+	if (dataQueue3)
+		delete dataQueue3;
+
+	if (circularBuffer3)
+		delete[] circularBuffer3;
+}
+
+
+
+void SpectrumView2::pushDataValue(double data)
+{
+	if (!dataQueue3) return;
+
+	// --- add data point, make room if needed
+	dataQueue3->enqueue(data);
+}
+
+void SpectrumView2::updateView()
+{
+
+
+	double audioSample = 0.0;
+	double max = 0.0;
+	bool success = dataQueue3->try_dequeue(audioSample);
+	if (success)
+	{
+
+		while (success)
+		{
+			success = dataQueue3->try_dequeue(audioSample);
+			//	if (success) // && audioSample > max)
+				//	addWaveDataPoint((max));
+
+			if (!circularBuffer3) return;
+			circularBuffer3[writeIndex3] = audioSample;
+			writeIndex3++;
+			if (writeIndex3 > circularBufferLength3 - 1)
+				writeIndex3 = 0;
+
+		}
+
+		// --- add to circular buffer
+
+	}
+
+	// --- this will set the dirty flag to repaint the view
+	invalid();
+
+}
+
+void SpectrumView2::draw(CDrawContext* pContext)
+{
+
+	pContext->setDrawMode(kAntiAliasing);
+
+	// --- setup the backround rectangle
+
+	CRect size = getViewSize();
+
+	float sample = 0.0f;
+	float colaudio = 0.0f;
+
+	if (!circularBuffer3) return;
+	// --- step through buffer
+	int index = writeIndex3 - 1;
+
+	if (index < 0)
+		index = circularBufferLength3 - 1;
+
+	pContext->setFillColor(CColor(0, 00, 0, 250)); // not grey was 200,200,200
+	//pContext->drawRect(size, kDrawFilled); 
+	auto pth = pContext->createGraphicsPath();
+	pth->addRoundRect(size, 5);
+	pContext->drawGraphicsPath(pth, CDrawContext::kPathFilledEvenOdd);
+	pth->forget();
+
+	for (int j = 0; j < circularBufferLength3; j++) {
+
+		sample = circularBuffer3[j];
+
+		int id = int(sample);
+		sample = sample - id;
+
+		switch (id) {
+
+		case 2: {		// max audio in l;
+			val2 = sample * 10.;
+			break;
+		}
+		case 4: {		// max audio in;
+			valold = sample * 10.;    //rr
+			break;
+		}
+		case 6: {		//  rms audio in;
+			rmsil = sample * 10.;
+			break;
+		}
+		case 8: {		// rms audio in;
+			rmsir = sample * 10.;
+			break;
+		}
+		case 10: {		// max audio in;
+			loutp = sample * 10. ;
+			break;
+		}
+		case 12: {		// max audio in;
+			routp = sample * 10.;
+			break;
+		}
+		case 14: {		// rms audio outleft;
+			rmsol = sample * 10.;
+			break;
+		}
+		case 16: {		// rms audio outright;
+			rmsor = sample * 10.;
+			break;
+		}
+
+		default: { break; }
+		}
+
+	}
+
+	countrr++;
+
+	if (countrr > 30) { countrr = 0; }
+
+	pContext->setLineWidth(.5);  // .5
+
+	harr[countrr] = ((1.f - (FastMin(valold, val2))));
+	harro[countrr] = ((1.f - (FastMin(loutp, routp))));
+
+
+	for (int j = 0; j < 30; j++) {			// max j is hold time
+		if (clpm < harr[j])
+		{
+			clpm = harr[j];
+		}
+
+		if (clpmo < harro[j])
+		{
+			clpmo = harro[j];
+		}
+	}
+
+	rr = getViewSize();
+
+	rr.setWidth(rr.getWidth()*.4);			// .4 , .2, .4 split
+
+	//rr.inset(rr.getWidth()*.5, 0);
+
+	rr.inset(0, 15);
+	rr.offset(0, -14);
+
+	srr = rr;
+	srr.inset(3, 0);
+	srr.offset(1, 9);
+
+	const float roof =  + 18.;
+
+	for (int i = 0; i <= 40; i++) {			//input l/r meters 
+
+		ifrac = i * (1. / 40.f);
+		ifracp = (i + 1) * (1. / 40.f);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
+
+
+		if (i < (40. + (roof - (2.5f*val2 * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
+		}
+		else {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
+		}
+
+		if (i == int(40. + (roof - (2.5f*(1.f - clpm) * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
+		}
+
+		if (i == int(40. + (roof - (2.5f*rmsil* 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
+		}
+
+		pContext->setFillColor(cc);
+
+		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
+		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
+
+		pContext->drawRect(CRect(srr.getLeftCenter().x, b.y, srr.getCenter().x, a.y), kDrawFilled);		//L
+
+
+		if (i < (40. + (roof - (2.5 *valold * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
+		}
+		else {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
+		}
+		if (i == int(40. + (roof - (2.5f*(1.f - clpm) * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
+		}
+
+		if (i == int(40. + (roof - (2.5f*rmsir * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
+		}
+
+		pContext->setFillColor(cc);
+
+		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
+		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
+
+		pContext->drawRect(CRect(srr.getCenter().x, b.y, srr.getBottomRight().x, a.y), kDrawFilled);		//R
+	}
+
+	CRect midrr = srr;
+	midrr.offset(srr.getWidth() + 2.5, .0);
+
+	srr.offset(srr.getWidth() + 8 + srr.getWidth()*.5, 0);
+
+	for (int i = 0; i <= 40; i++) {			//output l/r meters
+
+		ifrac = i * (1. / 40.f);
+		ifracp = (i + 1) * (1. / 40.f);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
+
+
+		if (i < (40. + (roof - (2.5f*loutp * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
+		}
+		else {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
+		}
+
+		if (i == int(40. + (roof - (2.5f*(1.f - clpmo) * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
+		}
+
+		if (i == int(40. + (roof - (2.5f*rmsol* 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
+		}
+
+		pContext->setFillColor(cc);
+
+		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
+		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
+
+		pContext->drawRect(CRect(srr.getLeftCenter().x, b.y, srr.getCenter().x, a.y), kDrawFilled);
+
+
+		if (i < (40. + (roof - (2.5f*routp * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
+		}
+		else {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
+		}
+		if (i == int(40. + (roof - (2.5f*(1.f - clpmo) * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
+		}
+		if (i == int(40. + (roof - (2.5f*rmsor * 40.f)))) {
+			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
+		}
+
+		pContext->setFillColor(cc);
+
+		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
+		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
+
+		pContext->drawRect(CRect(srr.getCenter().x, b.y, srr.getBottomRight().x, a.y), kDrawFilled);
+	}
+
+	midrr.setWidth(size.getWidth() * .2);
+//	midrr.offset(0, 0);
+
+	for (int i = 0; i <= 40; i++) {				// diff meters
+		ifrac = i * (1. / 40.f);
+		ifracp = (i + 1) * (1. / 40.f);
+
+	
+
+		if (i > (40. + (2 - (2.5f*(rmsol - rmsil) * 40.f)))) {						//L
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, .55f);
+		}
+		else {
+			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac , 0.5f);
+		}
+
+		pContext->setFillColor(cc);
+
+		b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
+		a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
+
+		pContext->drawRect(CRect(midrr.getBottomLeft().x, b.y, midrr.getBottomCenter().x, a.y), kDrawFilled);
+
+		if (i > (40. + (2 - (2.5f*(loutp - val2) * 40.f)))) {
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f, .55f);
+
+			pContext->setFillColor(cc);
+
+			b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
+			a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
+
+			pContext->drawRect(CRect(midrr.getBottomLeft().x, b.y, midrr.getBottomCenter().x, a.y), kDrawFilled);
+		}
+
+
+
+		if (i > (40. + (2 - (2.5f*(rmsor - rmsir) * 40.f)))) {				//R
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, .55f);
+		}
+		else {
+			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac, 0.5f);
+		}
+
+		pContext->setFillColor(cc);
+
+		b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
+		a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
+
+		pContext->drawRect(CRect(midrr.getBottomCenter().x, b.y, midrr.getBottomRight().x, a.y), kDrawFilled);
+
+		if (i > (40. + (2 - (2.5f*(routp - valold) * 40.f)))) {
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f, .55f);
+
+			pContext->setFillColor(cc);
+
+			b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
+			a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
+
+			pContext->drawRect(CRect(midrr.getBottomCenter().x, b.y, midrr.getBottomRight().x, a.y), kDrawFilled);
+		}
+
+	}
+
+
+
+	if (clpm < .999) {
+		g = toString(int(-(1. - (clpm)) * 100 + 24));
+	}
+	else g = "24+";
+
+	const CFontRef fntt = new CFontDesc("OCRStd", 14, 1);
+
+	h = 14;
+
+	CPoint cp(rr.getCenter().x - (h* g.length() * .25f), getViewSize().getBottomCenter().y - (.5*h) + 2);
+	pContext->setFillColor(kWhiteCColor);
+	pContext->drawString(g, cp, true);
+
+	if (clpmo < .99) {
+	g = toString(int(-(1. - (clpmo)) * 100 + 24));
+	}
+	else g = "12+";
+
+	cp(srr.getCenter().x - (h* g.length() * .25f), getViewSize().getBottomCenter().y - (.5*h) + 2);
+	pContext->drawString(g, cp, true);
+
+	delete fntt;
+
+	clpm = FastMin((clpm - .0065f), 1.f);			//FallTimes
+	clpmo = FastMin((clpmo - .0065f), 1.f);
+
+	// --- wrap the index value if neede
+	if (index < 0)
+		index = circularBufferLength3 - 1;
+
+}
+
+
 
 #ifdef HAVE_FFTW
 /**

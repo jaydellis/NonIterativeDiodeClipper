@@ -8840,15 +8840,17 @@ public:
 			wdfParameters2 = _wdfParameters;
 			double fc_Hz = wdfParameters2.fc; ///sampleRate ;	
 
-			double gain = pow(10., - wdfParameters2.boostCut_dB * 0.5 + .01);  //blows up at 0db and below
+			double gain = pow(10., -wdfParameters2.boostCut_dB * 0.05 );  //blows up at 0db and below
 
-			double R2 = 1.;
+			double R1 =  0.001;
+			double R2 = R1 / ( fmax( gain - 1 , .001) ) ;
 
-		//	if (abs(gain) > 0.001) {
-				double R1 = R2 *( 1. - gain)/gain;
-		//	}
+		//			double R2 = 1;
+	//		if ((gain) < 1.) {
+	//			R1 = R2 * (1. - gain) / gain;
+	//		}
 
-			double C1 = 1. / (2. * kPi * fc_Hz * R1 ) ; 
+			double C1 = 1. / (2. * kPi * fc_Hz * R2 ) ; 
 
 			seriesAdaptor_R.setComponentValue( R1 );
 			parallelTerminatedAdaptor_CR.setComponentValue_RC( R2, C1 ); // resValue);

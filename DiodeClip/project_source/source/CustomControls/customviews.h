@@ -99,6 +99,126 @@ private:
 
 };
 
+class SpectrumView2 : public CControl, public ICustomView
+{
+public:
+	SpectrumView2(const CRect& size, IControlListener* listener, int32_t tag);
+	~SpectrumView2();
+
+	/** ICustomView method: this repaints the control */
+	virtual void updateView() override;
+
+	/** ICustomView method: push a new audio sample into the ring buffer */
+	virtual void pushDataValue(double data) override;
+
+
+	/** override to draw, called if the view should draw itself*/
+	void draw(CDrawContext* pContext) override;
+
+	// --- for CControl pure abstract functions
+	CLASS_METHODS(SpectrumView2, CControl)
+
+
+
+protected:
+	// --- filled/unfilled FFT
+	bool filledFFT = true; ///< flag for filled FFT
+
+	int count = 0;
+
+	double* circularBuffer3 = nullptr;	///< circular buffer to store peak values
+	int writeIndex3 = 0;		///< circular buffer write location
+	int readIndex3 = 0;		///< circular buffer read location
+	int circularBufferLength3 = 512;///< circular buffer length
+	CRect currentRect3;		///< the rect to draw into
+
+	CColor locol;
+	float locut = 0.;
+	float hicut = 0.;
+	float midcut = 0.;
+	double lofreq = 100.;
+	double hifreq = 3000.;
+
+	double ilocut = 0.;
+	double ihicut = 0.;
+	double imidcut = 0.;
+
+	double logain = 0.;
+	double midgain = 0.;
+	double higain = 0.;
+
+	double envA = 0.;
+	double envB = 0.;
+	double volmx = 0.;
+
+	std::vector<float> vv;
+	std::vector<float> zz;
+	std::vector<float> nn;
+
+	float s = 0.1f;
+	float s2 = 0.3f; float im, inter, lptransr, lptransi, bptransr, bptransi, hptransr, hptransi = 0.1f;
+	//double freq = 1/ lofreq;
+
+	float magni, magni2, magnih2, xax = 0.01f;
+	float zdx = 0.;
+
+	CRect siz = getViewSize();
+
+	float subd = 40.f;
+	float isubd = 1.f / 40.f;
+
+	float harr[50];
+
+	float harro[50];
+
+	float valold = 0.5f;
+	float val2 = 0.5f;
+	int countrr = 0;
+
+	float rmsil = 0.5;
+	float rmsir = 0.5;
+
+	float loutp = 0.5;
+	float routp = 0.5;
+	float rmsol = 0.5;
+	float rmsor = 0.5;
+
+	float vold = 0.0f;
+	CPoint a;
+	CPoint b;
+	float ifracp = 0.0f;
+	float ifrac = 0.0f;
+
+	float maxstoldo = 0.5f;
+	float clpmo = 0.1f;
+
+	float maxst = 0.5f;
+	float maxstt = 0.5f;
+
+	float maxstold = 0.2f;
+	float clpm = 0.1f;
+	CRect rr;
+	CRect srr;
+	float h = 1.f;
+
+	int x = 0;
+
+	UTF8String g;
+	//	CFontRef fntt = new CFontDesc("OCRStd", 14, 1);
+	CColor cc;
+	CColor cc2;
+
+	CColor cl;
+
+	CRect hold;
+
+
+private:
+	moodycamel::ReaderWriterQueue<double, 512>* dataQueue3 = nullptr; ///< lock-free queue for incoming data, sized to DATA_QUEUE_LEN in length
+
+};
+
+
 #ifdef HAVE_FFTW
 // --- FFTW (REQUIRED)
 #include "fftw3.h"
