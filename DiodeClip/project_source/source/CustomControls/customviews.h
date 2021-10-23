@@ -183,6 +183,11 @@ protected:
 	float rmsol = 0.5;
 	float rmsor = 0.5;
 
+	float diffL = 0;
+	float diffR = 0;
+	float diffrmsR = 0;
+	float diffrmsL = 0;
+
 	float vold = 0.0f;
 	CPoint a;
 	CPoint b;

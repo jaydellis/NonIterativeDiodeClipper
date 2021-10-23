@@ -259,17 +259,17 @@ public:
 		double bb1[8] = { -.08 };
 		double bb2[8] = { .01 };
 
-		double state1[8] = { 0.0 };
-		double state2[8] = { 0.0 };
-		double out[8] = { 0.00 };
+		double state1[12] = { 0.0 };
+		double state2[12] = { 0.0 };
+		double out[12] = { 0.00 };
 
 		int stages = 4;
 
 		__m128d coeff[8][5];
 
-		__m128d outm[8] = { _mm_set1_pd(0.00) };
-		__m128d state1m[8] = { _mm_set1_pd(0.0)};
-		__m128d state2m[8] = { _mm_set1_pd(0.0)};
+		__m128d outm[12] = { _mm_set1_pd(0.00) };
+		__m128d state1m[12] = { _mm_set1_pd(0.0)};
+		__m128d state2m[12] = { _mm_set1_pd(0.0)};
 
 	};
 
@@ -478,12 +478,26 @@ __m128d FastExpSsef(__m128d x) // https://stackoverflow.com/questions/47025373/f
 inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions/47025373/fastest-implementation-of-the-natural-exponential-function-using-sse
 {
 	const __m128 a = _mm_set1_ps((1 << 22) / float( 0.69314718055994530942 ) );  // to get exp(x/2)
-	const __m128i b = _mm_set1_epi32(127 * (1 << 23));       // NB: zero shift!
+	const __m128i b = _mm_set1_epi32(127 * (1 << 23));       // NB: zero shift!				 // still not good enough accuracy/ maybe sounds better!?!??
 	__m128i r = _mm_cvtps_epi32(_mm_mul_ps(a, x));
 	__m128i s = _mm_add_epi32(b, r);
 	__m128i t = _mm_sub_epi32(b, r);
 	return _mm_div_ps(_mm_castsi128_ps(s), _mm_castsi128_ps(t));
 }
+
+inline __m128d rexp(__m128d x) {
+	x.m128d_f64[0] = exp(x.m128d_f64[0]);
+	x.m128d_f64[1] = exp(x.m128d_f64[1]);
+	return x;
+}
+
+inline __m128d sinhd(__m128d x) {
+	x.m128d_f64[0] = sinh(x.m128d_f64[0]);
+	x.m128d_f64[1] = sinh(x.m128d_f64[1]);
+
+	return x;
+}
+
 
  static inline double catmull( double x0, const double x1,  double x2, const double x3, const double D) {
 	
@@ -549,9 +563,9 @@ inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions
 
 	ssecat scrm[2];
 
-	Iir::ChebyshevII::LowPass<8> ups[2];
+	Iir::ChebyshevII::LowPass<12> ups[2];
 
-	Iir::ChebyshevII::LowPass<8> dwn[2];
+	Iir::ChebyshevII::LowPass<12> dwn[2];
 
 //	cbiq dwnn[2];
 
@@ -610,14 +624,15 @@ inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions
 
 	int sse_p = 0;
 
-	const __m128d _unityd = _mm_set1_pd( 1.);
-	const __m128d _nunityd = _mm_set1_pd(-1.);
-	const __m128d _zerod = _mm_set1_pd( 0.);
-	const __m128d _halfd = _mm_set1_pd(0.5);
+	const __m128d _unityd = _mm_set1_pd( 1.); // = 1
+	const __m128d _nunityd = _mm_set1_pd(-1.);	// = -1
+	const __m128d _zerod = _mm_set1_pd( 0.);	// = 0
+	const __m128d _halfd = _mm_set1_pd(0.5);	// = .5
 	const __m128d _sqfperror = { _mm_set1_pd(0.000001) };
+	const __m128d absmask = _mm_castsi128_pd(_mm_srli_epi32(_mm_set1_epi32(-1), 1));
 
-	const __m128d _dunityd = _mm_set1_pd(2.);
-	const __m128d _dnunityd = _mm_set1_pd(-2.);
+	const __m128d _dunityd = _mm_set1_pd(2.); // = 2
+	const __m128d _dnunityd = _mm_set1_pd(-2.);	// = -2
 
 	__m128d _c1 = _mm_set1_pd( 0.1 );
 	__m128d _c2 = _mm_set1_pd( 0.1 );
@@ -651,6 +666,8 @@ inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions
 	double rmsir = 0.01;
 	double rmsol = 0.01;
 	double rmsor = 0.01;
+	double meterinl = 0.;
+	double meterinr = 0.;
 
 	double relmi = (0.693147 / (300.0 * 0.001*48000.));
 	double rmse = 1.;
@@ -658,7 +675,7 @@ inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions
 	double viewoutput = 0.;
 
 	ICustomView* SpectrumView2 = nullptr;
-	moodycamel::ReaderWriterQueue<float, 8> customViewDataQueue;
+	moodycamel::ReaderWriterQueue<float, 16> customViewDataQueue;
 
 	std::atomic<bool> queueEnabler;		///< atomic bool for enabling/disabling the queue
 	bool isCustomViewDataQueueEnabled() const { return queueEnabler.load(std::memory_order_relaxed); }			///< set atomic variable with float

@@ -249,8 +249,8 @@ SpectrumView2::SpectrumView2(const VSTGUI::CRect& size, IControlListener* listen
 // --- init
 	writeIndex3 = 0;
 	readIndex3 = 0;
-	circularBufferLength3 = 9; //(int)size.getWidth();  /								///// must be length + 1
-	memset(circularBuffer3, 0, 9 * sizeof(double));  // circularBufferLength*sizeof(double));
+	circularBufferLength3 = 16; //(int)size.getWidth();  /								///// must be length + 1
+	memset(circularBuffer3, 0, 16 * sizeof(double));  // circularBufferLength*sizeof(double));
 	currentRect3 = size;
 
 	// --- ICustomView
@@ -376,6 +376,23 @@ void SpectrumView2::draw(CDrawContext* pContext)
 		}
 		case 16: {		// rms audio outright;
 			rmsor = sample * 10.;
+			break;
+		}
+
+		case 20: {		// 
+			diffL = sample * 10.;
+			break;
+		}
+		case 22: {		// 
+			diffR = sample * 10.;
+			break;
+		}
+		case 24: {		// 
+			diffrmsR = sample * 10.;
+			break;
+		}
+		case 26: {		// 
+			diffrmsL = sample * 10.;
 			break;
 		}
 
@@ -536,11 +553,11 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 	
 
-		if (i > (40. + (2 - (2.5f*(rmsol - rmsil) * 40.f)))) {						//L
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, .55f);
+		if (i > (40. + (1 - (2.5f*(diffrmsL) * 40.f)))) {						//L
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, (1.f - ifrac)*.55f + .4);
 		}
 		else {
-			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac , 0.5f);
+			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac , (1.f - ifrac)*.50f + .4);
 		}
 
 		pContext->setFillColor(cc);
@@ -550,8 +567,8 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 		pContext->drawRect(CRect(midrr.getBottomLeft().x, b.y, midrr.getBottomCenter().x, a.y), kDrawFilled);
 
-		if (i > (40. + (2 - (2.5f*(loutp - val2) * 40.f)))) {
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f, .55f);
+		if (i > (40. + (1 - (2.5f*(diffL) * 40.f)))) {
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45, (1.f - ifrac)*.55f+.4);
 
 			pContext->setFillColor(cc);
 
@@ -563,7 +580,7 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 
 
-		if (i > (40. + (2 - (2.5f*(rmsor - rmsir) * 40.f)))) {				//R
+		if (i > (40. + (1 - (2.5f*(diffrmsR) * 40.f)))) {				//R
 			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, .55f);
 		}
 		else {
@@ -577,7 +594,7 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 		pContext->drawRect(CRect(midrr.getBottomCenter().x, b.y, midrr.getBottomRight().x, a.y), kDrawFilled);
 
-		if (i > (40. + (2 - (2.5f*(routp - valold) * 40.f)))) {
+		if (i > (40. + (1 - (2.5f*(diffR) * 40.f)))) {
 			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f, .55f);
 
 			pContext->setFillColor(cc);
