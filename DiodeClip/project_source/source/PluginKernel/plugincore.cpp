@@ -123,7 +123,7 @@ bool PluginCore::initialize(PluginInfo& pluginInfo)
 	upss[0].setparams(dwn[0].getCascadeStorage());
 	upss[1].setparams(dwn[0].getCascadeStorage());
 
-	for (int i = 0; i < 100; i++) {  
+	for (int i = 0; i < 5000; i++) {  
 		dwnn[0].process(0.);
 		dwnn[1].process(0.);
 		upss[0].process(0.);
@@ -214,6 +214,7 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 
 	ingainfactor  = pow(10.0, inputgain_p  * .05);
 	outgainfactor = pow(10.0, outputgain_p * .05);
+	ampgainfactor = pow(10.0,  ampgain_p  * .05);
 
 	WDFParameters para;
 	para.fc = hipasscutoff_p; //5HZ
@@ -245,8 +246,10 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 	_c2 =  _mm_set1_pd(c2);
 	_c3 =  _mm_set1_pd(c3);
 	_c4 =  _mm_set1_pd(c4);
+	_vt =  _mm_set1_pd(vt);
 
 	dccut = 1. - ((2.*kPi*hipasscutoff_p )/ (getSampleRate())); //
+	dccutOS = 1. - ((2.*kPi*hipasscutoff_p) / (getSampleRate()*oversampling_p));
 
 	oversampsampinv = 1./oversampling_p;
 
@@ -479,6 +482,9 @@ Operation:
 bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 {
 	RCH::Undenormal noDenormals;
+	dctimer = fmin(dctimer + 0.01,1.);
+
+	__m128d _dccutOS = _mm_set1_pd(dccutOS);
 	
 	const double fs = getSampleRate() * oversampling_p;
 	const double k = 1. / fs;
@@ -489,6 +495,40 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 	const __m128d _k = _mm_set1_pd(k);
 	const __m128d _halfk = _mm_set1_pd(halfk);
 	const __m128d _alphak = _mm_set1_pd(alphak);
+
+
+	const double wk1 = 1.0 / (C * resistor_p);
+	const double wB0 = 2 * getSampleRate();
+
+	const double wk2 = (C * resistor_p ) / (wB0 * C * resistor_p + 1.0);
+	const double wk3 = (Is * resistor_p ) / (wB0 * C * resistor_p + 1.0);
+	const double wk5 = log((Is * resistor_p) / ((wB0 * C * resistor_p + 1.0) * vt));
+	const double wk6 = -wB0 - wB0;
+
+	const __m128d _wk1 = _mm_set1_pd(wk1);
+	const __m128d _wk2 = _mm_set1_pd(wk2);
+	const __m128d _wk3 = _mm_set1_pd(wk3);
+	const __m128d _wk5 = _mm_set1_pd(wk5);
+	const __m128d _wk6 = _mm_set1_pd(wk6);
+
+	const double ebersVT = .001 * ampVt_p;  //   0.0026  threshold point //blows up below 0.00002V
+	const double ebersIs = 1e-16; //   1e-16;  //weakly couple with Vt - best kept low
+	const double ebersBf = 100.;					// not interesting - except at -1 then 1/Vplus is gain.
+	const double ebersRe = 1000.; // 1e3;     //negligble effect
+	const double ebersVplus = 1.;	//  Voltage
+
+	const double ebersInvVT = 1.0 / ebersVT;
+	const double ebersk1 = ebersIs * ebersRe;
+	const double ebersk2 = 1.0 / ebersBf;
+	const double ebersk = log(ebersInvVT * ebersk1 * (1.0 + ebersk2));
+
+	const __m128d _ebersVplus = _mm_set1_pd(ebersVplus);
+	const __m128d _ebersVT = _mm_set1_pd(ebersVT);
+	const __m128d _ebersInvVT = _mm_set1_pd(ebersInvVT);
+	const __m128d _ebersk1 = _mm_set1_pd(ebersk1);
+	const __m128d _ebersk2 = _mm_set1_pd(ebersk2);
+	const __m128d _ebersk = _mm_set1_pd( ebersk);
+
 
 	// --- block processing -- write to outputs
 	for (uint32_t sample = blockInfo.blockStartIndex, i = 0;
@@ -503,51 +543,75 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		{
 			ingainsm  = ingainsm * .999 + 0.001 * ingainfactor;
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
-			assym_sm = assym_sm * .999 + 0.001 * ( assym_p );
-			const __m128d assym_d = _mm_set1_pd(  assym_sm);
+			ampgainsm = ampgainsm * .999 + 0.001 * ampgainfactor;
 
-			const double xin  = ( blockInfo.inputs[0][sample] * ingainsm  )* oversampling_p ;
-			const double xinr = ( blockInfo.inputs[1][sample] * ingainsm  )* oversampling_p ;
+			assym_sm = assym_sm * .999 + 0.001 * ( assym_p * dctimer );
 
-			const double inp[2] = { xin, xinr };
+			const __m128d assym_d   = _mm_set1_pd( assym_sm);
+			const __m128d _ingainsm = _mm_set1_pd(ingainsm);
+			const __m128d _ampgainsm = _mm_set1_pd(ampgainsm);
+
+			const double inp[2] = { ( blockInfo.inputs[0][sample] ) * oversampling_p ,
+										(blockInfo.inputs[1][sample])* oversampling_p };
 
 			__m128d _xin = _mm_load_pd(inp);
-			intxin[3][0] = intxin[2][0];
-			intxin[2][0] = intxin[1][0];
-			intxin[1][0] = intxin[0][0];
-			intxin[0][0] = _mm_set1_pd(xin / oversampling_p);
 
 			//		scrm->ssecatmullset(intxin[3][0], intxin[2][0], intxin[1][0], intxin[0][0]);
 
-			__m128d _xinfll[32] = { _mm_set1_pd(0.) };
+			__m128d _xinfll[32] = { _zerod };
 			_xinfll[0] = _xin;
 
 			for (int i = 0; i < oversampling_p; i++) {							 // SSE
 
-			//	_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, scrm->ssecatmullproc(_mm_set1_pd(  double(i) * oversampsampinv))));
+				_xin = upss[0].processSSE(_xinfll[i]);
 
-				_xin = upss[0].processSSE( _xinfll[i]);
+				_xin = _mm_mul_pd(_xin, _ingainsm);							//ingain
 
-				_xin = _mm_add_pd(_xin, _mm_mul_pd(_mm_and_pd(absmask, _xin), assym_d));
+				_xin = _mm_add_pd(_xin, _mm_set1_pd(assym_p));				//operating bias
 
-				_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, _xin) );
 
-				 __m128d _s1 = _mm_mul_pd(_c4, _x[0]);
-								_s1 = _mm_max_pd(_mm_min_pd(_s1, _mm_set1_pd(85.)), _mm_set1_pd(-85.));  //88 limit? 
+				_ebVx = _mm_mul_pd(_ebersk1, _mm_mul_pd(_ebersk2, BetterFastExpSsed(
+								_mm_mul_pd(_ebersInvVT, (_mm_sub_pd(_xin, _ebersVplus))))));
 
-			//	const __m128d expo  = _mm_castps_pd(BetterFastExpSse(_mm_castpd_ps(_s1)));
-			//	const __m128d expoR = _mm_castps_pd(BetterFastExpSse( (_mm_mul_pd((_mm_mul_pd(_nunityd, _s1)) )) ) ;
+				_ebVout = _mm_sub_pd(_mm_mul_pd(_ebersVT, _omega3(_mm_add_pd(_mm_mul_pd(_ebersInvVT, _mm_add_pd(_xin, _ebVx)), _ebersk))), _ebVx);
 
-			//	const __m128d _sh = _mm_mul_pd(_mm_sub_pd(expo, expoR), _halfd);
+				_ebVout = _mm_mul_pd(_ebVout, _ampgainsm);
+
+			//	_ebVout = _mm_sub_pd(_ebVout, _mm_set1_pd(.5*dctimer));
+					_dcstate = _dcblock;
+					_dcblock = _mm_add_pd( _ebVout , _mm_mul_pd( _dcblock , _dccutOS ) );
+					_dcout = _mm_sub_pd( _dcblock , _dcstate );
+
+
+				{																	//// Lambert Wright-Omega approx3
+					const __m128d q = _mm_sub_pd(_mm_mul_pd(_wk1, _dcout), _z1);
+					const __m128d r = _mm_div_pd(q, (_mm_sqrt_pd(_mm_mul_pd(q, q))));
+					const __m128d w = _mm_add_pd(_mm_mul_pd(_wk2, q), _mm_mul_pd(_wk3, r));
+					const __m128d OUT = _mm_sub_pd(w, _mm_mul_pd(_mm_mul_pd(_vt, r), _omega3(_mm_add_pd(_mm_mul_pd(_mm_mul_pd(_c4, r), w), _wk5))));
+					_z1 = _mm_sub_pd(_mm_mul_pd(_wk6, OUT), _z1);
+					_x[0] = OUT; // 
+				}
+			
+/*
+		{										
+				_xin = _ebVout;																			//// Ducceschi
+
+				_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, _xin));
+
+				__m128d _s1 = _mm_mul_pd(_c4, _x[0]);
+				_s1 = _mm_max_pd(_mm_min_pd(_s1, _mm_set1_pd(40.)), _mm_set1_pd(-40.));  // hard limit for std::sinh
+
+//	const __m128d expo  = rexp(_s1);				//no good
+//	const __m128d expoR = rexp( _mm_mul_pd(_nunityd, _s1) ) ;	
+//	const __m128d _sh = _mm_mul_pd(_mm_sub_pd(expo, expoR), _halfd);
 				const __m128d _sh = sinhd(_s1);
 
-				const __m128d _f = _mm_mul_pd( _halfk, _mm_add_pd( _mm_mul_pd(_x[0], _c1), _mm_mul_pd(_c2, _sh)));
-	
-				const __m128d dvzmsk = _mm_cmpgt_pd(_mm_mul_pd(_x[0], _x[0]), _sqfperror );
+				const __m128d _f = _mm_mul_pd(_halfk, _mm_add_pd(_mm_mul_pd(_x[0], _c1), _mm_mul_pd(_c2, _sh)));
 
-					_fx = _mm_add_pd(_c1, _mm_mul_pd(_c2, _mm_div_pd(_sh, _x[0])));    
+				const __m128d dvzmsk = _mm_cmpgt_pd(_mm_mul_pd(_x[0], _x[0]), _sqfperror);
 
-				_fx = _mm_add_pd( _mm_and_pd(dvzmsk, _fx), _mm_andnot_pd(dvzmsk, _mm_add_pd(_c1, _c3)) );
+				_fx = _mm_add_pd(_c1, _mm_mul_pd(_c2, _mm_div_pd(_sh, _x[0])));
+				_fx = _mm_add_pd(_mm_and_pd(dvzmsk, _fx), _mm_andnot_pd(dvzmsk, _mm_add_pd(_c1, _c3)));
 
 				const __m128d _fp = _mm_mul_pd(_c3, _mm_sqrt_pd(_mm_add_pd(_unityd, _mm_mul_pd(_sh, _sh))));
 				const __m128d _sigma = _mm_add_pd(_unityd, _mm_mul_pd(_alphak, _fp));
@@ -555,13 +619,17 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 				_x[0] = _mm_div_pd(_mm_add_pd(_mm_sub_pd(_mm_mul_pd(_sigma, _x[0]), _f), _xin),
 					_mm_add_pd(_sigma, _mm_mul_pd(_halfk, _fx)));
 
+				//		_x[0] = _mm_add_pd(_mm_add_pd(
+				//			_mm_and_pd(_mm_cmpgt_pd(_x[0], _unityd), _mm_add_pd(_mm_mul_pd(_mm_sub_pd(_x[0], _unityd), _halfd), _unityd)),
+				//			_mm_and_pd(_mm_cmplt_pd(_x[0], _nunityd), _mm_add_pd(_mm_mul_pd(_mm_sub_pd(_x[0], _nunityd), _halfd), _nunityd))),
+				//			_mm_and_pd(_mm_cmple_pd(_mm_mul_pd(_x[0], _x[0]), _unityd), _x[0]));		// SLOW???  //  compares??
+
+			//	_x[0] = _mm_max_pd(_mm_min_pd(_unityd, _x[0]), _nunityd);
+			}
+	*/
+
 
 				_xoutput[i] = dwnn[0].processSSE(_x[0]);
-
-				_x[0] = _mm_add_pd(_mm_add_pd(
-					_mm_and_pd(_mm_cmpgt_pd(_x[0], _unityd), _mm_add_pd(_mm_mul_pd(_mm_sub_pd(_x[0], _unityd), _halfd), _unityd)),
-					_mm_and_pd(_mm_cmplt_pd(_x[0], _nunityd), _mm_add_pd(_mm_mul_pd(_mm_sub_pd(_x[0], _nunityd), _halfd), _nunityd))),
-					_mm_and_pd(_mm_cmple_pd(_mm_and_pd(absmask, _x[0]), _unityd), _x[0]));
 
 			}
 
@@ -593,8 +661,8 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 //		xoutR = wdfhishelf->processAudioSample(-xoutR);
 
-			blockInfo.outputs[0][sample] = (xout)* outgainsm;
-			blockInfo.outputs[1][sample] = (xoutR)* outgainsm;
+			blockInfo.outputs[0][sample] = (xout)  * outgainsm;
+			blockInfo.outputs[1][sample] = (xoutR) * outgainsm;
 
 	}
 	else
@@ -607,17 +675,9 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
 			assym_sm = assym_sm * .999 + 0.001 * assym_p;
 
-			double xin = (blockInfo.inputs[channel][sample] * ingainsm + assym_sm) * oversampling_p;
+			double xin = (blockInfo.inputs[channel][sample] * ingainsm ) * oversampling_p;
 			//	xin = fmin(fmax(xin, -12), 12);
 
-			intin[7][channel] = intin[6][channel];
-			intin[6][channel] = intin[5][channel];
-			intin[5][channel] = intin[4][channel];
-			intin[4][channel] = intin[3][channel];
-			intin[3][channel] = intin[2][channel];
-			intin[2][channel] = intin[1][channel];
-			intin[1][channel] = intin[0][channel];
-			intin[0][channel] = xin;
 
 
 			double xinfll[32] = { 0. };
@@ -627,13 +687,11 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 			for (int i = 0; i < oversampling_p; i++) {   // c+
 
-				//		xin = k * c1 * lagrange3xx(intin[0][channel], intin[1][channel], intin[2][channel], intin[3][channel], 1. + i * oversampsampinv) * oversampsampinv;
-				//		xin = k * c1 * lagrange6xx(intin[7][channel], intin[6][channel], intin[5][channel], intin[4][channel], intin[3][channel], intin[2][channel], intin[1][channel], intin[0][channel], 3. + i * oversampsampinv, 0, 0) * oversampsampinv;
-
-				//		xin = k * c1 * catmull(intin[3][channel], intin[2][channel], intin[1][channel], intin[0][channel], double(i) * oversampsampinv) * oversampsampinv;
 			//	xin = k * c1 * upss[channel].processUnrolled8p(xinfll[i]);
-						xin = k * c1 * ups[channel].filter( xin * ( i < 1));
+						xin = ups[channel].filter( xin * ( i < 1));
 
+/*
+						xin = k * c1 * xin;
 				const double s1 = fmin(fmax(c4 * x[channel], -35.), 35.);  //+-88 limit// or 36.7
 		//		const double s1 = c4 * x[channel];
 
@@ -650,6 +708,33 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 				//		if (FastAbs(sigma + halfk * fx) > 0.00000001) {
 				x[channel] = (sigma * x[channel] - f + xin) / (sigma + halfk * fx);
 				//		}
+
+				*/
+					//	xin = xin + assym_p * 9;
+					//	xin = xin + assym_p;
+						double xinh = xin + assym_p; // fmax(xin, 0) + assym_p * 0;
+
+						double ebVoutn = 0.; 
+						{			//ebers-moll
+							
+							ebVx   =  ebersk1 * expapproxf( fmin(80.,fmax(-80,(ebersInvVT * (xinh - ebersVplus)) + ebersk2) ) );   //d'angelo's exp no good here/ high gain
+							ebVout = ebersVT * omega3(ebersInvVT * (xinh + ebVx) + ebersk) - ebVx;
+						}
+
+						xin = ebVout - .5;
+					
+				{												// D'angelo's Wright-Omega approach https://www.dafx.de/paper-archive/2019/DAFx2019_paper_5.pdf
+						//	xin = xin + assym_p * fabs(xin);
+					const double q = wk1 * xin - p_z1[channel];
+					const double r = signbit(q) * -2. + 1.;;
+					const double w = wk2 * q + wk3 * r;
+					const double OUT = w - vt * r * omega3( c4 * r * w + wk5);
+					 p_z1[channel] = wk6 * OUT - p_z1[channel];
+
+					x[channel] = OUT; // fmin(fmax(ebVx, -1.), 1.);
+				}
+
+			
 
 							xoutput[i] = dwn[channel].filter(x[channel]);
 			//	xoutput[i] = dwnn[channel].processUnrolled8p(x[channel]);
@@ -678,7 +763,7 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			blockInfo.outputs[channel][sample] = (xout)* outgainsm;
 
 		} 
-		xoutR = blockInfo.inputs[1][sample]; // quick fix for stereo meter
+		xoutR = blockInfo.outputs[1][sample]; // quick fix for stereo meter
 	}
 		//meters
 		{
@@ -904,14 +989,14 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 			viewoutput = 16. + (-20.* log10(fmin(sqrt(rmsor) *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
 
-			viewoutput = 20. + (-20.* log10(fmin((  (zmi2L / outgainsm)/ zmiL) , 0.999)))*.001;
+			viewoutput = 20. + (-20.* log10(fmin((  ( zmi2L / outgainsm)/( zmiL * ampgainsm )) , 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 22. + (-20.* log10(fmin(( (zmi2R / outgainsm) / zmiR) , 0.999)))*.001;;
+			viewoutput = 22. + (-20.* log10(fmin(( (zmi2R / outgainsm) /(zmiR * ampgainsm)) , 0.999)))*.001;;
 			customViewDataQueue.enqueue(viewoutput);
 
-			viewoutput = 24. + (-20.* log10(fmin(((sqrt(rmsol) / outgainsm) / rmsil), 0.999)))*.001;
+			viewoutput = 24. + (-20.* log10(fmin(((sqrt(rmsol) / outgainsm) / ( rmsil * ampgainsm) ), 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 26. + (-20.* log10(fmin(((sqrt(rmsor) / outgainsm) / rmsir), 0.999)))*.001;;
+			viewoutput = 26. + (-20.* log10(fmin(((sqrt(rmsor) / outgainsm) / ( rmsir * ampgainsm)), 0.999)))*.001;;
 			customViewDataQueue.enqueue(viewoutput);
 	
 			customViewDataQueue.enqueue(viewoutput);
@@ -1057,7 +1142,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&outputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 1., 8000., 500., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 1., 800000., 500., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&resistor_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
@@ -1065,7 +1150,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&alpha_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::capacitor, "capacitor", "nF", controlVariableType::kDouble, 20, 60, 33., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::capacitor, "capacitor", "nF", controlVariableType::kDouble, 20, 70, 33., taper::kLinearTaper);
 	piParam->setBoundVariable(&capacitor_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1073,7 +1158,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 10, 50, 26, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 15, 45, 26, taper::kLinearTaper);
 	piParam->setBoundVariable(&thermalvoltage_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1086,7 +1171,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setIsDiscreteSwitch(true);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::assymetry, "assym", " x", controlVariableType::kDouble, 0, 1., 0., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::assymetry, "dc bias", " V", controlVariableType::kDouble, 0, 1., 0.6, taper::kLinearTaper);
 	piParam->setBoundVariable(&assym_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1098,6 +1183,19 @@ bool PluginCore::initPluginParameters()
 	piParam = new PluginParameter(controlID::ssecontrol, "sse", "x", controlVariableType::kInt, 0, 1, 1, taper::kLinearTaper);
 	piParam->setBoundVariable(&sse_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::ampgain, " dBs", " x", controlVariableType::kDouble, 0, 48., 0., taper::kLinearTaper);
+	piParam->setBoundVariable(&ampgain_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::ampVt, " vt ", " mV", controlVariableType::kDouble, 0.1, 10., 0.5, taper::kAntiLogTaper);
+	piParam->setBoundVariable(&ampVt_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::cathodeR, " ", " x", controlVariableType::kDouble, .001, 1000., 1000., taper::kAntiLogTaper);
+	piParam->setBoundVariable(&cathodeR_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
 
 	// **--0xEDA5--**
 

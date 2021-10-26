@@ -581,10 +581,10 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 
 		if (i > (40. + (1 - (2.5f*(diffrmsR) * 40.f)))) {				//R
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, .55f);
+			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, (1.f - ifrac)*.55f + .4);
 		}
 		else {
-			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac, 0.5f);
+			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac, (1.f - ifrac)*.50f + .4);
 		}
 
 		pContext->setFillColor(cc);

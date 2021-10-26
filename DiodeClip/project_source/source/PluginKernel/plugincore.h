@@ -36,8 +36,10 @@ enum controlID {
 	hipasscutoff = 8,
 	assymetry = 9,
 	oversampling = 10,
-	ssecontrol = 11
-
+	ssecontrol = 11,
+	ampgain = 12,
+	ampVt = 13,
+	cathodeR = 14
 };
 
 
@@ -361,70 +363,7 @@ public:
 	}
 
 	//chexck http://www.chokkan.org/software/dist/fastexp.c.html todoo
-	//???????????//
-	/////////??
-
-	__m128d exp_sse2(__m128d x)  // total BS
-	{
-
-		__m128d tmp = _mm_setzero_pd();
-
-		__m128d fx;
-
-		__m128i emm0;
-
-		__m128d oneD = *(__m128d*) _D_1;
-
-		x = _mm_min_pd(x, *(__m128d*)_D_exp_upper);
-		x = _mm_max_pd(x, *(__m128d*)_D_exp_lower);
-
-		// exp(x) = exp( z + n log(2) ) = exp(z) * n^2 , where 0<=z < 1
-
-		fx = _mm_mul_pd(x, *(__m128d*)_D_cephes_LOG2);
-		fx = _mm_add_pd(fx, *(__m128d*)_D_0p5);
-
-		emm0 = _mm_cvttpd_epi32(fx); //overloaded to handle _m128d
-		tmp = _mm_cvtepi32_pd(emm0);
-
-		__m128d flag = _mm_cmpgt_pd(tmp, fx); // ? 0xffffffffffffffff : 0x0
-		flag = _mm_and_pd(flag, oneD);
-		fx = _mm_sub_pd(tmp, flag);
-
-		tmp = _mm_mul_pd(fx, *(__m128d*)_D_cephes_C1);
-		__m128d tmp2 = _mm_mul_pd(fx, *(__m128d*)_D_cephes_C2);
-		x = _mm_sub_pd(x, tmp);
-
-		x = _mm_mul_pd(x, tmp2);
-
-		__m128d z = _mm_mul_pd(x, x);
-
-		__m128d y = *(__m128d*)_D_cephes_p0;
-		y = _mm_mul_pd(y, x);
-		y = _mm_add_pd(y, *(__m128d*)_D_cephes_p1);
-		y = _mm_mul_pd(y, x);
-		y = _mm_add_pd(y, *(__m128d*)_D_cephes_p2);
-		y = _mm_mul_pd(y, x);
-		y = _mm_add_pd(y, *(__m128d*)_D_cephes_p3);
-		y = _mm_mul_pd(y, x);
-		y = _mm_add_pd(y, *(__m128d*)_D_cephes_p4);
-		y = _mm_mul_pd(y, x);
-		y = _mm_add_pd(y, *(__m128d*)_D_cephes_p5);
-		y = _mm_mul_pd(y, z);
-		y = _mm_add_pd(y, x);
-		y = _mm_add_pd(y, oneD);
-
-		/* build 2^n */
-
-		emm0 = _mm_cvttpd_epi32(fx);
-		emm0 = _mm_add_epi32(emm0, *(__m128i*)_I_0x7f);
-		emm0 = _mm_slli_epi32(emm0, 23);
-		__m128d pow2n = _mm_castsi128_pd(emm0);
-
-		y = _mm_mul_pd(y, pow2n);
-
-		return y;
-	}
-
+	
 
 	static inline double hermite(double t2, double t1, double t0, double t_1, double x) {
 
@@ -485,35 +424,77 @@ inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions
 	return _mm_div_ps(_mm_castsi128_ps(s), _mm_castsi128_ps(t));
 }
 
+
+ const __m128 BFExpSseA = _mm_set1_ps((1 << 22) / float(0.69314718055994530942));  // to get exp(x/2)
+ const __m128i BFExpSseB = _mm_set1_epi32(127 * (1 << 23));       // NB: zero shift!				
+
+ inline __m128d BetterFastExpSsed(__m128d in)  // https://stackoverflow.com/questions/47025373/fastest-implementation-of-the-natural-exponential-function-using-sse
+{
+	const __m128i r = _mm_cvtps_epi32(_mm_mul_ps(BFExpSseA, _mm_castpd_ps(in)));
+	return _mm_div_pd(_mm_castsi128_pd(_mm_add_epi32(BFExpSseB, r) ), _mm_castsi128_pd(_mm_sub_epi32(BFExpSseB, r) ));
+}
+
+
 inline __m128d rexp(__m128d x) {
-	x.m128d_f64[0] = exp(x.m128d_f64[0]);
-	x.m128d_f64[1] = exp(x.m128d_f64[1]);
-	return x;
+		if (x.m128d_f64[0] < 80) x.m128d_f64[0] = 80;
+		if (x.m128d_f64[0] > -80) x.m128d_f64[0] = -80;
+
+		x.m128d_f64[0] = exp(x.m128d_f64[0]);
+		x.m128d_f64[1] = exp(x.m128d_f64[1]);
+		return x;
+
 }
 
 inline __m128d sinhd(__m128d x) {
 	x.m128d_f64[0] = sinh(x.m128d_f64[0]);
 	x.m128d_f64[1] = sinh(x.m128d_f64[1]);
-
-	return x;
+//	double xf[2];
+//	_mm_store1_pd(xf, x);
+//	xf[0] = (expf_approx(xf[0] ) -expf_approx(-xf[0]))*.5;
+//	xf[1] = (expf_approx(xf[1]) - expf_approx(-xf[1]))*.5;
+	return x;// _mm_load_pd(xf);
 }
 
 
+	/** approximation for 2^x, optimized on the range [0, 1] */   //http://www.dangelo.audio/code/omega.h
+	template <typename T>
+	inline T pow2_approx(T x)
+	{
+		constexpr T alpha = (T) 0.07944154167983575;
+		constexpr T beta = (T) 0.2274112777602189;
+		constexpr T gamma = (T) 0.6931471805599453;
+		constexpr T zeta = (T) 1.0;
+
+		return zeta + x * (gamma + x * (beta + x * alpha));
+	}
+
+	/** approximation for exp(x) (64-bit) */
+	inline double exp_approx64(double x)
+	{
+		x = fmax(-126.0, 1.442695040888963 * x);
+
+		union
+		{
+			int64_t i;
+			double d;
+		} v;
+
+		int64_t xi = (int64_t)x;
+		int64_t l = x < 0.0 ? xi - 1 : xi;
+		double d = x - (double)l;
+		v.i = (l + 1023) << 52;
+
+		return v.d * pow2_approx<double>(d);
+	}
+
  static inline double catmull( double x0, const double x1,  double x2, const double x3, const double D) {
 	
-	//	const double a2 = (x2 - x0) * .5;
-	//	const double ad = a2 + x1 - x2;
-
 		x0 = (x2 - x0) * .5;
 		x2 = x0 + x1 - x2;
 
 		const double a0 = x2 + x2 - x0 + ((x3 - x1) * .5);	
-	//		const double a0 = ad + ad - a2 + ((x3 - x1) * .5);
-	//	const double a1 = a0 + ad ;
-	//	const double a1 = a0 + x2 ;
 
 		return a0 * D - (a0 + x2) * D + x0 * D + x1 * D;
-	//	return a0 * D - a1 * D + a2 * D + x1 * D;
 	}
 
  inline __m128d ssecatmull(__m128d x0, __m128d x1, __m128d x2, __m128d x3, __m128d D) {
@@ -564,7 +545,6 @@ inline __m128d sinhd(__m128d x) {
 	ssecat scrm[2];
 
 	Iir::ChebyshevII::LowPass<12> ups[2];
-
 	Iir::ChebyshevII::LowPass<12> dwn[2];
 
 //	cbiq dwnn[2];
@@ -573,6 +553,8 @@ inline __m128d sinhd(__m128d x) {
 	double ingainsm = 1.;
 	double outgainfactor = 1.;
 	double outgainsm = 1.;
+	double ampgainfactor = 1.;
+	double ampgainsm = 1.;
 
 	double hipasscutoff_p = 10.;
 	int hipass_p = 0;
@@ -589,8 +571,15 @@ inline __m128d sinhd(__m128d x) {
 	double dcstate[8] = { 0. }; 
 	double dccut = .999;
 
+	double dccutOS = .999;
+
+	__m128d _dcblock = { 0. };
+	__m128d _dcstate = { 0. };
+	__m128d _dcout = { 0. };
+
 	double inputgain_p = 0.;
 	double outputgain_p = 0.;
+
 
 	double alpha_p = 5.;
 
@@ -612,11 +601,11 @@ inline __m128d sinhd(__m128d x) {
 	double assym_p = 0.0;
 	double assym_sm = 0.0;
 
+	double ampgain_p = 1.;
+	double ampVt_p = 0.00023;
+	double cathodeR_p = 1000;
+
 	double fx = 0.0001;
-
-	double intin[8][2] = { 0. };
-
-	__m128d intxin[8][2] = { 0. };
 
 	int oversampling_p = 8;
 	double oversampsampinv = .125;
@@ -633,6 +622,8 @@ inline __m128d sinhd(__m128d x) {
 
 	const __m128d _dunityd = _mm_set1_pd(2.); // = 2
 	const __m128d _dnunityd = _mm_set1_pd(-2.);	// = -2
+	const __m128d _explim = _mm_set1_pd(80); // = 80
+	const __m128d _nexplim = _mm_set1_pd(-80); // = -80
 
 	__m128d _c1 = _mm_set1_pd( 0.1 );
 	__m128d _c2 = _mm_set1_pd( 0.1 );
@@ -651,6 +642,191 @@ inline __m128d sinhd(__m128d x) {
 
 	WDFSpeakerImp wdfimp[2];
 
+	//ebers-molll
+	double	ebVx = 0.01;
+	double	ebVout = 0.0;
+	__m128d	_ebVx = _mm_set1_pd(0.01);
+	__m128d	_ebVout = _mm_set1_pd(0.00);
+
+	double Omega(double xn) {
+
+		double x1 = -3.341459552768620;
+		double x2 = 8.0;
+		double a = -1.314293149877800e-3;
+		double b = 4.775931364975583e-2;
+		double c = 3.631952663804445e-1;
+		double d = 6.313183464296682e-1;
+
+		double out1 = a * (xn*xn*xn) + b * (xn*xn) + c * xn + d;
+
+		if (xn < x1) { out1 = 0.; }
+		else if (xn > x2) { out1 = xn - log(xn); }
+
+		return out1;
+	}
+
+	double OOmega(double xn) {
+		double y = Omega(xn);
+		y = y - (y - exp(xn - y)) / (y + 1);
+		return y;
+	}
+
+	inline float log2f_approx(float x) {
+
+		union {
+			int	i;
+			float	f;
+		} v;
+		v.f = x;
+		int ex = v.i & 0x7f800000;
+		int e = (ex >> 23) - 127;
+		v.i = (v.i - ex) | 0x3f800000;
+		return (float)e - 2.213475204444817f + v.f * (3.148297929334117f + v.f * (-1.098865286222744f + v.f * 0.1640425613334452f));
+	}
+
+	inline __m128 _log2f_approx(__m128 x) {
+		union {
+			__m128i	i;
+			__m128	f;
+		} v; 
+		v.f = x; 
+		auto ex = _mm_and_si128(v.i, _mm_set1_epi32(0x7f800000));   // NO vector integer AND !!!!!
+		auto e =  _mm_sub_epi32( _mm_srli_si128(ex, 23) , _mm_set1_epi32(127) );	
+		v.i = _mm_or_si128( _mm_sub_epi32(v.i, ex) , _mm_set1_epi32( 0x3f800000 ) );				// fck NO OR !
+		return _mm_add_ps( _mm_sub_ps(_mm_castsi128_ps(e) , _mm_set1_ps( 2.213475204444817f)) , _mm_mul_ps( v.f , (_mm_add_ps( _mm_set1_ps(3.148297929334117f ), _mm_mul_ps(v.f , (_mm_add_ps( _mm_set1_ps(-1.098865286222744f) , _mm_mul_ps(v.f ,_mm_set1_ps( 0.1640425613334452f)))) ) ) ) ) );
+	}
+
+
+	inline float logf_approx(float x) {
+		return 0.693147180559945f * log2f_approx(x);
+	}
+
+	/** approximation for log(x) (64-bit) */
+	template <typename T>
+	inline T log2_approx(T x)
+	{
+		constexpr T alpha = (T) 0.1640425613334452;
+		constexpr T beta = (T)-1.098865286222744;
+		constexpr T gamma = (T) 3.148297929334117;
+		constexpr T zeta = (T)-2.213475204444817;
+
+		return zeta + x * (gamma + x * (beta + x * alpha));
+	}
+
+	inline double log_approxd(double x)
+	{
+		union
+		{
+			int64_t i;
+			double d;
+		} v;
+		v.d = x;
+		int64_t ex = v.i & 0x7ff0000000000000;
+		int64_t e = (ex >> 53) - 510;
+		v.i = (v.i - ex) | 0x3ff0000000000000;
+
+		return 0.693147180559945 * ((double)e + log2_approx<double>(v.d));
+	}
+
+	inline double omega3(double x) {
+		const double x1 = -3.341459552768620;
+		const double x2 = 8.;
+		const double a = -1.314293149877800e-3;
+		const double b = 4.775931364975583e-2;
+		const double c = 3.631952663804445e-1;
+		const double d = 6.313183464296682e-1;
+		return x < x1 ? 0. : (x < x2 ? d + x * (c + x * (b + x * a)) : x - log_approxd(x));
+	}
+
+	const double oomx1 = -3.341459552768620;
+	const double oomx2 = 8.;
+	const double ooma = -1.314293149877800e-3;
+	const double oomb = 4.775931364975583e-2;
+	const double oomc = 3.631952663804445e-1;
+	const double oomd = 6.313183464296682e-1;
+
+	inline __m128d _omega3z(__m128d in) {
+		double x[2];
+		_mm_store_pd(x, in);
+
+			x[0] = x[0] < 8.0 ? 0 : (x[0] < oomx2 ? oomd + x[0] * (oomc + x[0] * (oomb + x[0] * ooma)) : x[0] - log_approxd(x[0]));
+			x[1] = x[1] < 8.0 ? 0 : (x[1] < oomx2 ? oomd + x[1] * (oomc + x[1] * (oomb + x[1] * ooma)) : x[1] - log_approxd(x[1]));
+
+		return _mm_load_pd(x);
+	}
+
+	inline float omega4(float x) {
+		const float y = omega3(x);
+		return y - (y - exp_approx64(x - y)) / (y + 1.f);
+	}
+
+	const __m128d _x1Om3 = _mm_set1_pd(-3.341459552768620);
+	const __m128d _x2Om3 = _mm_set1_pd(8.);
+	const __m128d _aOm3  = _mm_set1_pd(-1.314293149877800e-3);
+	const __m128d _bOm3  = _mm_set1_pd(4.775931364975583e-2);
+	const __m128d _cOm3  = _mm_set1_pd(3.631952663804445e-1);
+	const __m128d _dOm3  = _mm_set1_pd(6.313183464296682e-1);
+
+
+	inline __m128d _omega3(__m128d in) {
+
+		double x[2] ;
+		_mm_store_pd(x, in);
+		
+		x[0] = x[0] < 8.0 ? 0 : x[0] - log_approxd(x[0]);
+		x[1] = x[1] < 8.0 ? 0 : x[1] - log_approxd(x[1]);
+
+		const __m128d _log2 =  _mm_load_pd(x);
+
+		__m128d inn = { _zerod };
+			inn = _mm_and_pd(_mm_cmpgt_pd(in, _x1Om3), _mm_add_pd( _dOm3, _mm_mul_pd( in, _mm_add_pd( _mm_mul_pd( _mm_add_pd( _mm_mul_pd( in, _aOm3), _bOm3 ), in ), _cOm3 ) ) ) );
+
+		in = _mm_add_pd( _mm_and_pd(_mm_cmplt_pd(in, _x2Om3), inn), _log2 );
+
+	//	x[0] = x[0] < x1 ? 0.f : (x[0] < x2 ? d + x[0] * (c + x[0] * (b + x[0] * a)) : x[0] - log2(x[0]));
+
+		return in ;
+	}
+
+	float exp_cst1_f = 2139095040.f;			// GOOD!!		https://github.com/jhjourdan/SIMD-math-prims/blob/master/simd_math_prims.h
+	float exp_cst2_f = 0.f;
+	/* Relative error bounded by 1e-5 for normalized outputs
+   Returns invalid outputs for nan inputs
+   Continuous error */
+	inline float expapproxf(float val) {
+		union { int32_t i; float f; } xu, xu2;
+		float val2, val3, val4, b;
+		int32_t val4i;
+		val2 = 12102203.1615614f*val + 1065353216.f;
+		val3 = val2 < exp_cst1_f ? val2 : exp_cst1_f;
+		val4 = val3 > exp_cst2_f ? val3 : exp_cst2_f;
+		val4i = (int32_t)val4;
+		xu.i = val4i & 0x7F800000;
+		xu2.i = (val4i & 0x7FFFFF) | 0x3F800000;
+		b = xu2.f;
+
+		/* Generated in Sollya with:
+		   > f=remez(1-x*exp(-(x-1)*log(2)),
+					 [|(x-1)*(x-2), (x-1)*(x-2)*x, (x-1)*(x-2)*x*x|],
+					 [1.000001,1.999999], exp(-(x-1)*log(2)));
+		   > plot(exp((x-1)*log(2))/(f+x)-1, [1,2]);
+		   > f+x;
+		*/
+		return
+			xu.f * (0.509871020f + b * (0.312146713f + b * (0.166617139f + b *
+			(-2.190619930e-3f + b * 1.3555747234e-2f))));
+	}
+
+	double exp_cst1_d = 2139095040.0;
+	double exp_cst2_d = 0.0;
+	double exp_cst3_d = 12102203.1615614;
+	double exp_cst4_d = 1065353216.;
+
+
+
+	double p_z1[2] = { 0.1 };
+	__m128d _z1 = { 0.1 };
+	__m128d _vt = _mm_set1_pd( 0.001 );
 
 	double zmiL = 0.0;
 	double zmiR = 0.;
@@ -671,6 +847,8 @@ inline __m128d sinhd(__m128d x) {
 
 	double relmi = (0.693147 / (300.0 * 0.001*48000.));
 	double rmse = 1.;
+
+	double dctimer = 0;	//to kill initial dc
 
 	double viewoutput = 0.;
 
