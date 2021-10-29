@@ -212,9 +212,14 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 	myfile.close();
 	*/
 
-	ingainfactor  = pow(10.0, inputgain_p  * .05);
-	outgainfactor = pow(10.0, outputgain_p * .05);
-	ampgainfactor = pow(10.0,  ampgain_p  * .05);
+		ingainfactor  = pow(10.0, inputgain_p  * .05);
+		outgainfactor = pow(10.0, outputgain_p * .05);
+		ampgainfactor = pow(10.0,  ampgain_p  * .05);
+		dthreshold    = pow(10.0, threshold_p  * .05);
+		_threshold    = _mm_set1_pd( dthreshold );
+
+		crossover = pow(10.0, overbias_p  * .05);
+		_overbias = _mm_set1_pd( crossover );
 
 	WDFParameters para;
 	para.fc = hipasscutoff_p; //5HZ
@@ -249,7 +254,7 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 	_vt =  _mm_set1_pd(vt);
 
 	dccut = 1. - ((2.*kPi*hipasscutoff_p )/ (getSampleRate())); //
-	dccutOS = 1. - ((2.*kPi*hipasscutoff_p) / (getSampleRate()*oversampling_p));
+	dccutOS = 1. - ((2.*kPi*dccut_p) / (getSampleRate()*oversampling_p));
 
 	oversampsampinv = 1./oversampling_p;
 
@@ -257,33 +262,6 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 
     return true;
 }
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//	--- FRAME PROCESSING FUNCTION --- //
-/*
-	This is where you do your DSP processing on a PER-FRAME basis; this means that you are
-	processing one sample per channel at a time, and is the default mechanism in ASPiK.
-
-	You will get better performance is you process buffers or blocks instead, HOWEVER for
-	some kinds of processing (e.g. ping pong delay) you must process on a per-sample
-	basis anyway. This is also easier to understand for most newbies.
-
-	NOTE:
-	You can enable and disable frame/buffer procssing in the constructor of this object:
-
-	// --- to process audio frames call:
-	processAudioByFrames();
-
-	// --- to process complete DAW buffers call:
-	processAudioByBlocks(WANT_WHOLE_BUFFER);
-
-	// --- to process sub-blocks of the incoming DAW buffer in 64 sample blocks call:
-	processAudioByBlocks(DEFAULT_AUDIO_BLOCK_SIZE);
-
-	// --- to process sub-blocks of size N, call:
-	processAudioByBlocks(N);
-*/
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 /**
 \brief frame-processing method
@@ -483,8 +461,6 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 {
 	RCH::Undenormal noDenormals;
 	dctimer = fmin(dctimer + 0.01,1.);
-
-	__m128d _dccutOS = _mm_set1_pd(dccutOS);
 	
 	const double fs = getSampleRate() * oversampling_p;
 	const double k = 1. / fs;
@@ -513,7 +489,7 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 	const double ebersVT = .001 * ampVt_p;  //   0.0026  threshold point //blows up below 0.00002V
 	const double ebersIs = 1e-16; //   1e-16;  //weakly couple with Vt - best kept low
-	const double ebersBf = 100.;					// not interesting - except at -1 then 1/Vplus is gain.
+	const double ebersBf = 100.;					// not interesting //try mV
 	const double ebersRe = 1000.; // 1e3;     //negligble effect
 	const double ebersVplus = 1.;	//  Voltage
 
@@ -544,48 +520,68 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			ingainsm  = ingainsm * .999 + 0.001 * ingainfactor;
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
 			ampgainsm = ampgainsm * .999 + 0.001 * ampgainfactor;
+			dccutsm = dccutsm * .999 + 0.001 * dccutOS;
 
 			assym_sm = assym_sm * .999 + 0.001 * ( assym_p * dctimer );
 
 			const __m128d assym_d   = _mm_set1_pd( assym_sm);
 			const __m128d _ingainsm = _mm_set1_pd(ingainsm);
 			const __m128d _ampgainsm = _mm_set1_pd(ampgainsm);
+			const __m128d _dccutOS = _mm_set1_pd(dccutsm);
 
 			const double inp[2] = { ( blockInfo.inputs[0][sample] ) * oversampling_p ,
 										(blockInfo.inputs[1][sample])* oversampling_p };
 
 			__m128d _xin = _mm_load_pd(inp);
 
-			//		scrm->ssecatmullset(intxin[3][0], intxin[2][0], intxin[1][0], intxin[0][0]);
 
-			__m128d _xinfll[32] = { _zerod };
+			__m128d _xinfll[32] = {_zerod };
 			_xinfll[0] = _xin;
 
 			for (int i = 0; i < oversampling_p; i++) {							 // SSE
 
 				_xin = upss[0].processSSE(_xinfll[i]);
 
-				_xin = _mm_mul_pd(_xin, _ingainsm);							//ingain
+				_xin = _mm_mul_pd(_xin, _ingainsm);							//input gain
 
-				_xin = _mm_add_pd(_xin, _mm_set1_pd(assym_p));				//operating bias
+				_xin = _mm_add_pd(_xin, assym_d);				//operating bias
 
 
-				_ebVx = _mm_mul_pd(_ebersk1, _mm_mul_pd(_ebersk2, BetterFastExpSsed(
+				_ebVx = _mm_mul_pd(_ebersk1, _mm_mul_pd(_ebersk2, BetterFastExpSsed(						//D'Angelos ebers moll Transistor
 								_mm_mul_pd(_ebersInvVT, (_mm_sub_pd(_xin, _ebersVplus))))));
-
 				_ebVout = _mm_sub_pd(_mm_mul_pd(_ebersVT, _omega3(_mm_add_pd(_mm_mul_pd(_ebersInvVT, _mm_add_pd(_xin, _ebVx)), _ebersk))), _ebVx);
 
-				_ebVout = _mm_mul_pd(_ebVout, _ampgainsm);
 
-			//	_ebVout = _mm_sub_pd(_ebVout, _mm_set1_pd(.5*dctimer));
-					_dcstate = _dcblock;
+					_dcstate = _dcblock;																// coupling
 					_dcblock = _mm_add_pd( _ebVout , _mm_mul_pd( _dcblock , _dccutOS ) );
 					_dcout = _mm_sub_pd( _dcblock , _dcstate );
 
+					_dcout = _mm_mul_pd(_dcout, _ampgainsm);
 
-				{																	//// Lambert Wright-Omega approx3
+		const __m128d thrshmask = _mm_mul_pd(_mm_set1_pd(-0.3241584), _mm_max_pd(_zerod, _mm_sub_pd(_dcout, _threshold)) );			// Pirkle Grid-Conduction stage
+		const __m128d compressionfactor = _mm_add_pd(_mm_set1_pd(0.4548416), _mm_mul_pd(_mm_set1_pd(0.5451584), rexp( thrshmask))) ;	//original addition factor = 0.4473253
+
+				_dcout = _mm_mul_pd( _dcout ,  compressionfactor  );
+						
+					{																									//Class B Stage
+						const __m128d pos_in = _mm_add_pd(_overbias, _dcout);
+						_cbposVx = _mm_mul_pd(_ebersk1, _mm_mul_pd(_ebersk2, BetterFastExpSsed(						//pos
+							_mm_mul_pd(_ebersInvVT, (_mm_sub_pd(pos_in, _ebersVplus))))));
+						_cbposVout = _mm_sub_pd(_mm_mul_pd(_ebersVT, _omega3(_mm_add_pd(_mm_mul_pd(_ebersInvVT, _mm_add_pd(pos_in, _cbposVx)), _ebersk))), _cbposVx);
+
+						const __m128d neg_in = _mm_sub_pd(_overbias, _dcout);
+
+						_cbnegVx = _mm_mul_pd(_ebersk1, _mm_mul_pd(_ebersk2, BetterFastExpSsed(						//neg
+							_mm_mul_pd(_ebersInvVT, (_mm_sub_pd(neg_in, _ebersVplus))))));
+						_cbnegVout = _mm_sub_pd(_mm_mul_pd(_ebersVT, _omega3(_mm_add_pd(_mm_mul_pd(_ebersInvVT, _mm_add_pd(neg_in, _cbnegVx)), _ebersk))), _cbnegVx);
+
+						_dcout = _mm_sub_pd(_cbposVout, _cbnegVout);
+					}
+
+
+				{																	//// Lambert Wright-Omega approx3 - DIODE Pair
 					const __m128d q = _mm_sub_pd(_mm_mul_pd(_wk1, _dcout), _z1);
-					const __m128d r = _mm_div_pd(q, (_mm_sqrt_pd(_mm_mul_pd(q, q))));
+					const __m128d r = _mm_div_pd(q, (_mm_sqrt_pd(_mm_max_pd(_mm_mul_pd(q, q), _sqfperror))));
 					const __m128d w = _mm_add_pd(_mm_mul_pd(_wk2, q), _mm_mul_pd(_wk3, r));
 					const __m128d OUT = _mm_sub_pd(w, _mm_mul_pd(_mm_mul_pd(_vt, r), _omega3(_mm_add_pd(_mm_mul_pd(_mm_mul_pd(_c4, r), w), _wk5))));
 					_z1 = _mm_sub_pd(_mm_mul_pd(_wk6, OUT), _z1);
@@ -595,13 +591,12 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 /*
 		{										
 				_xin = _ebVout;																			//// Ducceschi
-
 				_xin = _mm_mul_pd(_k, _mm_mul_pd(_c1, _xin));
 
 				__m128d _s1 = _mm_mul_pd(_c4, _x[0]);
 				_s1 = _mm_max_pd(_mm_min_pd(_s1, _mm_set1_pd(40.)), _mm_set1_pd(-40.));  // hard limit for std::sinh
 
-//	const __m128d expo  = rexp(_s1);				//no good
+//	const __m128d expo  = rexp(_s1);				//no good for division
 //	const __m128d expoR = rexp( _mm_mul_pd(_nunityd, _s1) ) ;	
 //	const __m128d _sh = _mm_mul_pd(_mm_sub_pd(expo, expoR), _halfd);
 				const __m128d _sh = sinhd(_s1);
@@ -627,7 +622,6 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			//	_x[0] = _mm_max_pd(_mm_min_pd(_unityd, _x[0]), _nunityd);
 			}
 	*/
-
 
 				_xoutput[i] = dwnn[0].processSSE(_x[0]);
 
@@ -673,7 +667,9 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		{
 			ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
 			outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
-			assym_sm = assym_sm * .999 + 0.001 * assym_p;
+			assym_sm = assym_sm * .999 + 0.001 * assym_p*dctimer;
+			ampgainsm = ampgainsm * .999 + 0.001 * ampgainfactor;
+			dccutsm = dccutsm * .999 + 0.001 * dccutOS;
 
 			double xin = (blockInfo.inputs[channel][sample] * ingainsm ) * oversampling_p;
 			//	xin = fmin(fmax(xin, -12), 12);
@@ -710,31 +706,48 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 				//		}
 
 				*/
-					//	xin = xin + assym_p * 9;
-					//	xin = xin + assym_p;
-						double xinh = xin + assym_p; // fmax(xin, 0) + assym_p * 0;
+
+						double xinh = xin + assym_sm - x[channel] * .0; // fmax(xin, 0) + assym_p * 0;
 
 						double ebVoutn = 0.; 
-						{			//ebers-moll
-							
-							ebVx   =  ebersk1 * expapproxf( fmin(80.,fmax(-80,(ebersInvVT * (xinh - ebersVplus)) + ebersk2) ) );   //d'angelo's exp no good here/ high gain
+						{										//ebers-moll equations
+							ebVx   =  ebersk1 * exp( FastMin(40.,FastMax(-40.,(ebersInvVT * (xinh - ebersVplus)) + ebersk2) ) );   //
 							ebVout = ebersVT * omega3(ebersInvVT * (xinh + ebVx) + ebersk) - ebVx;
 						}
 
-						xin = ebVout - .5;
+			//			xin = ebVout - .5  ;
 					
-				{												// D'angelo's Wright-Omega approach https://www.dafx.de/paper-archive/2019/DAFx2019_paper_5.pdf
-						//	xin = xin + assym_p * fabs(xin);
+
+						dcstate1[channel] = dcblock1[channel];
+						dcblock1[channel] = ebVout + dcblock1[channel] * dccutsm;
+						xin = dcblock1[channel] - dcstate1[channel];
+
+						if (xin > dthreshold) {															//// Pirkle's Grid Conduction stage
+							xin = xin * (0.4548416 +										////<- original addition constant was 0.4473253 but f(0) != 1.
+								0.5451584*expapproxf(-0.3241584* FastMax(xin - dthreshold, 0.)) );
+						}
+
+																																	////Class B 
+						{	cbposVx = ebersk1 * exp(FastMin(40., FastMax(-40., (ebersInvVT * ((crossover + xin) - ebersVplus)) + ebersk2)));   //positive half
+							cbposVout = ebersVT * omega3(ebersInvVT * ((crossover + xin) + cbposVx) + ebersk) - cbposVx;
+
+							cbnegVx = ebersk1 * exp(FastMin(40., FastMax(-40., (ebersInvVT * (crossover-xin - ebersVplus)) + ebersk2)));   //negative half
+							cbnegVout = ebersVT * omega3(ebersInvVT * ((crossover - xin) + cbnegVx) + ebersk) - cbnegVx;	}
+
+						xin = cbposVout - cbnegVout;
+						
+						xin = xin * ampgainsm;
+
+				{												// D'angelo's Lambert Wright-Omega Diode - https://www.dafx.de/paper-archive/2019/DAFx2019_paper_5.pdf
 					const double q = wk1 * xin - p_z1[channel];
-					const double r = signbit(q) * -2. + 1.;;
+					const double r = signbit(q) * -2. + 1.;
 					const double w = wk2 * q + wk3 * r;
 					const double OUT = w - vt * r * omega3( c4 * r * w + wk5);
 					 p_z1[channel] = wk6 * OUT - p_z1[channel];
 
-					x[channel] = OUT; // fmin(fmax(ebVx, -1.), 1.);
+					x[channel] = OUT;
 				}
 
-			
 
 							xoutput[i] = dwn[channel].filter(x[channel]);
 			//	xoutput[i] = dwnn[channel].processUnrolled8p(x[channel]);
@@ -767,19 +780,19 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 	}
 		//meters
 		{
-			envinmi = ( FastAbs( meterinl  * ingainsm)) - zmiL;  //meter in
-			envpolmi = ((envinmi > 0.0)) + ((envinmi < 0.0) * relmi);
+			envinmi     = ( FastAbs( meterinl  * ingainsm)) - zmiL;  //meter in
+			envpolmi    = ((envinmi > 0.0)) + ((envinmi < 0.0) * relmi);
 			zmiL = zmiL + (envinmi * envpolmi);
 
-			envinmiR = ( FastAbs( meterinr * ingainsm)) - zmiR;			// 1 was gainsm
-			envpolmiR = ((envinmiR > 0.0)) + ((envinmiR < 0.0) * relmi);
+			envinmiR    = ( FastAbs( meterinr * ingainsm)) - zmiR;			// 1 was gainsm
+			envpolmiR   = ((envinmiR > 0.0)) + ((envinmiR < 0.0) * relmi);
 			zmiR = zmiR + (envinmiR * envpolmiR);
 
-			envinmi2L = ( FastAbs( xout) * outgainsm) - zmi2L;
+			envinmi2L  = ( FastAbs( xout) * outgainsm) - zmi2L;
 			envpolmi2L = ((envinmi2L > 0.0)) + ((envinmi2L < 0.0) * relmi);
 			zmi2L = zmi2L + (envinmi2L * envpolmi2L);   //.00049
 
-			envinmi2R = ( FastAbs( xoutR ) * outgainsm) - zmi2R;
+			envinmi2R  = ( FastAbs( xoutR ) * outgainsm) - zmi2R;
 			envpolmi2R = ((envinmi2R > 0.0)) + ((envinmi2R < 0.0) * relmi);
 			zmi2R = zmi2R + (envinmi2R * envpolmi2R);   //.00049				//meter out
 
@@ -971,32 +984,32 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 		if (isCustomViewDataQueueEnabled()) {
 
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 2. + (-20.f* log10f(fmin(zmiL *.0625, 0.999)))*.001;
+			viewoutput = 2. + (-20.f* log10f(FastMin(zmiL *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 4. + (-20.f* log10f(fmin(zmiR *.0625, 0.999)))*.001;
+			viewoutput = 4. + (-20.f* log10f(FastMin(zmiR *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 10. + (-20.f* log10f(fmin(zmi2L *.0625, 0.999)))*.001;
+			viewoutput = 10. + (-20.f* log10f(FastMin(zmi2L *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 12. + (-20.f* log10f(fmin(zmi2R *.0625, 0.999)))*.001;
+			viewoutput = 12. + (-20.f* log10f(FastMin(zmi2R *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
 
-			viewoutput = 6. + (-20.* log10(fmin(sqrt(rmsil) *.0625, 0.999)))*.001;
+			viewoutput = 6. + (-20.* log10(FastMin(sqrt(rmsil) *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 8. + (-20.* log10(fmin(sqrt(rmsir) *.0625, 0.999)))*.001;
+			viewoutput = 8. + (-20.* log10(FastMin(sqrt(rmsir) *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 14. + (-20.* log10(fmin(sqrt(rmsol) *.0625, 0.999)))*.001;
+			viewoutput = 14. + (-20.* log10(FastMin(sqrt(rmsol) *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);  
-			viewoutput = 16. + (-20.* log10(fmin(sqrt(rmsor) *.0625, 0.999)))*.001;
+			viewoutput = 16. + (-20.* log10(FastMin(sqrt(rmsor) *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
 
-			viewoutput = 20. + (-20.* log10(fmin((  ( zmi2L / outgainsm)/( zmiL * ampgainsm )) , 0.999)))*.001;
+			viewoutput = 20. + (-20.* log10(FastMin((  ( zmi2L / outgainsm)/( zmiL * ampgainsm )) , 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 22. + (-20.* log10(fmin(( (zmi2R / outgainsm) /(zmiR * ampgainsm)) , 0.999)))*.001;;
+			viewoutput = 22. + (-20.* log10(FastMin(( (zmi2R / outgainsm) /(zmiR * ampgainsm)) , 0.999)))*.001;;
 			customViewDataQueue.enqueue(viewoutput);
 
-			viewoutput = 24. + (-20.* log10(fmin(((sqrt(rmsol) / outgainsm) / ( rmsil * ampgainsm) ), 0.999)))*.001;
+			viewoutput = 24. + (-20.* log10(FastMin(((sqrt(rmsol) / outgainsm) / ( rmsil * ampgainsm) ), 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 26. + (-20.* log10(fmin(((sqrt(rmsor) / outgainsm) / ( rmsir * ampgainsm)), 0.999)))*.001;;
+			viewoutput = 26. + (-20.* log10(FastMin(((sqrt(rmsor) / outgainsm) / ( rmsir * ampgainsm)), 0.999)))*.001;;
 			customViewDataQueue.enqueue(viewoutput);
 	
 			customViewDataQueue.enqueue(viewoutput);
@@ -1142,7 +1155,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&outputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 1., 800000., 500., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 400000., 1., 500., taper::kLogTaper);
 	piParam->setBoundVariable(&resistor_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
@@ -1158,7 +1171,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 15, 45, 26, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 15, 55, 33, taper::kLinearTaper);
 	piParam->setBoundVariable(&thermalvoltage_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1184,18 +1197,29 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&sse_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::ampgain, " dBs", " x", controlVariableType::kDouble, 0, 48., 0., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::ampgain, "drive", " dBs", controlVariableType::kDouble, 0, 24., 0., taper::kLinearTaper);
 	piParam->setBoundVariable(&ampgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::ampVt, " vt ", " mV", controlVariableType::kDouble, 0.1, 10., 0.5, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::ampVt, "vt ", " mV", controlVariableType::kDouble, 0.1, 10., 0.5, taper::kLinearTaper);
 	piParam->setBoundVariable(&ampVt_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::cathodeR, " ", " x", controlVariableType::kDouble, .001, 1000., 1000., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::cathodeR, " ", " x", controlVariableType::kDouble, .00, 1., 0., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&cathodeR_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
+	piParam = new PluginParameter(controlID::threshold, "threshold", " dBs", controlVariableType::kDouble, -64, 14., 0., taper::kLinearTaper);
+	piParam->setBoundVariable(&threshold_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::overbias, "overbias", " dBs", controlVariableType::kDouble, -24., 24., 0., taper::kLinearTaper);
+	piParam->setBoundVariable(&overbias_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::dccutoff, "dc cut", " Hz", controlVariableType::kDouble, 1., 200., 10., taper::kAntiLogTaper);
+	piParam->setBoundVariable(&dccut_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
 
 	// **--0xEDA5--**
 

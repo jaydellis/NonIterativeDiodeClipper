@@ -13,6 +13,8 @@
 // -----------------------------------------------------------------------------
 #include "customviews.h"
 
+#include <iomanip>
+
 namespace VSTGUI {
 
 
@@ -436,26 +438,27 @@ void SpectrumView2::draw(CDrawContext* pContext)
 	srr.inset(3, 0);
 	srr.offset(1, 9);
 
-	const float roof =  + 18.;
+	const float roof =   18.;
+	const float segments = 80;
 
-	for (int i = 0; i <= 40; i++) {			//input l/r meters 
+	for (int i = 0; i <= segments; i++) {			//input l/r meters 
 
-		ifrac = i * (1. / 40.f);
-		ifracp = (i + 1) * (1. / 40.f);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
+		ifrac = i * (1. / segments);
+		ifracp = (i + 1) * (1. / segments);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
 
 
-		if (i < (40. + (roof - (2.5f*val2 * 40.f)))) {
+		if (i < (segments + (roof - (2.5f*val2 * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
 		}
 		else {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
 		}
 
-		if (i == int(40. + (roof - (2.5f*(1.f - clpm) * 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*(1.f - clpm) * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
 		}
 
-		if (i == int(40. + (roof - (2.5f*rmsil* 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*rmsil* segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
 		}
 
@@ -467,17 +470,17 @@ void SpectrumView2::draw(CDrawContext* pContext)
 		pContext->drawRect(CRect(srr.getLeftCenter().x, b.y, srr.getCenter().x, a.y), kDrawFilled);		//L
 
 
-		if (i < (40. + (roof - (2.5 *valold * 40.f)))) {
+		if (i < (segments + (roof - (2.5 *valold * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
 		}
 		else {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
 		}
-		if (i == int(40. + (roof - (2.5f*(1.f - clpm) * 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*(1.f - clpm) * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
 		}
 
-		if (i == int(40. + (roof - (2.5f*rmsir * 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*rmsir * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
 		}
 
@@ -494,24 +497,24 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 	srr.offset(srr.getWidth() + 8 + srr.getWidth()*.5, 0);
 
-	for (int i = 0; i <= 40; i++) {			//output l/r meters
+	for (int i = 0; i <= segments; i++) {			//output l/r meters
 
-		ifrac = i * (1. / 40.f);
-		ifracp = (i + 1) * (1. / 40.f);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
+		ifrac = i * (1. / segments);
+		ifracp = (i + 1) * (1. / segments);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
 
 
-		if (i < (40. + (roof - (2.5f*loutp * 40.f)))) {
+		if (i < (segments + (roof - (2.5f*loutp * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
 		}
 		else {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
 		}
 
-		if (i == int(40. + (roof - (2.5f*(1.f - clpmo) * 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*(1.f - clpmo) * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
 		}
 
-		if (i == int(40. + (roof - (2.5f*rmsol* 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*rmsol* segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
 		}
 
@@ -523,16 +526,16 @@ void SpectrumView2::draw(CDrawContext* pContext)
 		pContext->drawRect(CRect(srr.getLeftCenter().x, b.y, srr.getCenter().x, a.y), kDrawFilled);
 
 
-		if (i < (40. + (roof - (2.5f*routp * 40.f)))) {
+		if (i < (segments + (roof - (2.5f*routp * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
 		}
 		else {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
 		}
-		if (i == int(40. + (roof - (2.5f*(1.f - clpmo) * 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*(1.f - clpmo) * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
 		}
-		if (i == int(40. + (roof - (2.5f*rmsor * 40.f)))) {
+		if (i == int(segments + (roof - (2.5f*rmsor * segments)))) {
 			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
 		}
 
@@ -543,17 +546,18 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 		pContext->drawRect(CRect(srr.getCenter().x, b.y, srr.getBottomRight().x, a.y), kDrawFilled);
 	}
+	
 
 	midrr.setWidth(size.getWidth() * .2);
 //	midrr.offset(0, 0);
 
-	for (int i = 0; i <= 40; i++) {				// diff meters
-		ifrac = i * (1. / 40.f);
-		ifracp = (i + 1) * (1. / 40.f);
+	for (int i = 0; i <= segments; i++) {				// diff meters
+		ifrac = i * (1. / segments);
+		ifracp = (i + 1) * (1. / segments);
 
 	
 
-		if (i > (40. + (1 - (2.5f*(diffrmsL) * 40.f)))) {						//L
+		if (i > (segments + (1 - (2.5f*(diffrmsL) * segments)))) {						//L
 			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, (1.f - ifrac)*.55f + .4);
 		}
 		else {
@@ -567,7 +571,7 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 		pContext->drawRect(CRect(midrr.getBottomLeft().x, b.y, midrr.getBottomCenter().x, a.y), kDrawFilled);
 
-		if (i > (40. + (1 - (2.5f*(diffL) * 40.f)))) {
+		if (i > (segments + (1 - (2.5f*(diffL) * segments)))) {
 			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45, (1.f - ifrac)*.55f+.4);
 
 			pContext->setFillColor(cc);
@@ -580,7 +584,7 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 
 
-		if (i > (40. + (1 - (2.5f*(diffrmsR) * 40.f)))) {				//R
+		if (i > (segments + (1 - (2.5f*(diffrmsR) * segments)))) {				//R
 			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, (1.f - ifrac)*.55f + .4);
 		}
 		else {
@@ -594,7 +598,7 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 		pContext->drawRect(CRect(midrr.getBottomCenter().x, b.y, midrr.getBottomRight().x, a.y), kDrawFilled);
 
-		if (i > (40. + (1 - (2.5f*(diffR) * 40.f)))) {
+		if (i > (segments + (1 - (2.5f*(diffR) * segments)))) {
 			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f, .55f);
 
 			pContext->setFillColor(cc);
@@ -607,10 +611,13 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 	}
 
+	std::stringstream strng;
+	strng << std::fixed;
+	strng << std::setprecision(1);
 
-
-	if (clpm < .999) {
-		g = toString(int(-(1. - (clpm)) * 100 + 24));
+	if (clpm < .999) {										// in Peak
+		strng << (-(1. - (clpm)) * 100 + 24);
+		g = strng.str();
 	}
 	else g = "24+";
 
@@ -618,21 +625,26 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 	h = 14;
 
-	CPoint cp(rr.getCenter().x - (h* g.length() * .25f), getViewSize().getBottomCenter().y - (.5*h) + 2);
+	CPoint cp(rr.getCenter().x - (h* g.length() * .25f) + 2, getViewSize().getBottomCenter().y - (.5*h) + 2);
 	pContext->setFillColor(kWhiteCColor);
 	pContext->drawString(g, cp, true);
 
-	if (clpmo < .99) {
-	g = toString(int(-(1. - (clpmo)) * 100 + 24));
+	std::stringstream strng2;
+	strng2 << std::fixed;
+	strng2 << std::setprecision(1);
+
+	if (clpmo < .99) {									// out Peak
+	strng2 << ((-(1. - (clpmo)) * 100 + 24));
+	g = strng2.str();
 	}
-	else g = "12+";
+	else g = "24+";
 
 	cp(srr.getCenter().x - (h* g.length() * .25f), getViewSize().getBottomCenter().y - (.5*h) + 2);
 	pContext->drawString(g, cp, true);
 
 	delete fntt;
 
-	clpm = FastMin((clpm - .0065f), 1.f);			//FallTimes
+	clpm  = FastMin((clpm - .0065f), 1.f);			//FallTimes
 	clpmo = FastMin((clpmo - .0065f), 1.f);
 
 	// --- wrap the index value if neede

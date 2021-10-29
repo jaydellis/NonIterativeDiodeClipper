@@ -39,37 +39,12 @@ enum controlID {
 	ssecontrol = 11,
 	ampgain = 12,
 	ampVt = 13,
-	cathodeR = 14
+	cathodeR = 14,
+	threshold = 15,
+	overbias = 16,
+	dccutoff =17
 };
 
-
-#define SSE2_DOUBLE_CONST(Key, v) \
-    static const __declspec(align(16)) double _D_##Key[2] = { v, v }
-// repeat a const to be in packed form
-
-#define SSE2_INT_CONST(Key, v) \
-    static const __declspec(align(16)) int _I_##Key[4] = {v, v, v, v}
-
-/*  SSE2 defs start */
-SSE2_DOUBLE_CONST(1, 1.0);
-SSE2_DOUBLE_CONST(0p5, 0.5);
-
-SSE2_DOUBLE_CONST(cephes_LOG2, 1.44269504088896341);
-SSE2_DOUBLE_CONST(cephes_C1, 0.693359375);
-SSE2_DOUBLE_CONST(cephes_C2, -2.12194440e-4);
-
-SSE2_DOUBLE_CONST(cephes_p0, 1.9875691500E-4);
-SSE2_DOUBLE_CONST(cephes_p1, 1.3981999507E-3);
-SSE2_DOUBLE_CONST(cephes_p2, 8.3334519073E-3);
-SSE2_DOUBLE_CONST(cephes_p3, 4.1665795894E-2);
-SSE2_DOUBLE_CONST(cephes_p4, 1.6666665459E-1);
-SSE2_DOUBLE_CONST(cephes_p5, 5.0000001201E-1);
-
-SSE2_DOUBLE_CONST(exp_upper, 88.3762626647949);
-SSE2_DOUBLE_CONST(exp_lower, -88.3762626647949);
-
-SSE2_INT_CONST(0x7f, 0x7f);
-/*  SSE2 defs end */
 
 // **--0x0F1F--**
 
@@ -319,6 +294,18 @@ public:
 		return a * x + (-1. + a) * x;
 	}
 
+	template <class T>
+	inline T FastMax(const T& left, const T& right)
+	{
+		return left > right ? left : right;
+	}
+
+	template <class T>
+	inline T FastMin(const T& left, const T& right)
+	{
+		return left < right ? left : right;
+	}
+
 	inline double exp2a(double x) {		//https://codingforspeed.com/using-faster-exponential-approximation/
 		x = 1.0 + x * 0.0009765625;
 		x *= x; x *= x; x *= x; x *= x;
@@ -436,13 +423,13 @@ inline __m128 BetterFastExpSse(__m128 x)  // https://stackoverflow.com/questions
 
 
 inline __m128d rexp(__m128d x) {
-		if (x.m128d_f64[0] < 80) x.m128d_f64[0] = 80;
-		if (x.m128d_f64[0] > -80) x.m128d_f64[0] = -80;
+	double ex[2];
+	_mm_store_pd(ex, x);
 
-		x.m128d_f64[0] = exp(x.m128d_f64[0]);
-		x.m128d_f64[1] = exp(x.m128d_f64[1]);
-		return x;
-
+		ex[0] = exp(ex[0]);
+		ex[1] = exp(ex[1]);
+	
+		return 	_mm_load_pd(ex);
 }
 
 inline __m128d sinhd(__m128d x) {
@@ -555,6 +542,7 @@ inline __m128d sinhd(__m128d x) {
 	double outgainsm = 1.;
 	double ampgainfactor = 1.;
 	double ampgainsm = 1.;
+	double dccutsm = 1.;
 
 	double hipasscutoff_p = 10.;
 	int hipass_p = 0;
@@ -567,19 +555,28 @@ inline __m128d sinhd(__m128d x) {
 
 	double x[8] = { 0. };
 
-	double dcblock[8] = { 0. };
-	double dcstate[8] = { 0. }; 
+	double dcblock[2] = { 0. };
+	double dcstate[2] = { 0. }; 
 	double dccut = .999;
 
-	double dccutOS = .999;
+	double dcblock1[2] = { 0. };
+	double dcstate1[2] = { 0. };
 
-	__m128d _dcblock = { 0. };
-	__m128d _dcstate = { 0. };
-	__m128d _dcout = { 0. };
+	double dccutOS = .999;
+	double dccut_p = 5;
+
+	__m128d _dcblock = _mm_set1_pd(0.);
+	__m128d _dcstate = _mm_set1_pd(0.);
+	__m128d _dcout = _mm_set1_pd(0.);
+
+	double dthreshold = 1.;
+	__m128d _threshold = _mm_set1_pd(1);
+	double threshold_p = 0;
 
 	double inputgain_p = 0.;
 	double outputgain_p = 0.;
 
+	double sdiode = 0;
 
 	double alpha_p = 5.;
 
@@ -602,8 +599,13 @@ inline __m128d sinhd(__m128d x) {
 	double assym_sm = 0.0;
 
 	double ampgain_p = 1.;
-	double ampVt_p = 0.00023;
-	double cathodeR_p = 1000;
+	double ampVt_p = 0.023;
+	double cathodeR_p = 0;
+
+	double overbias_p = 1.;
+	double crossover = 0;
+	__m128d _overbias = _mm_set1_pd(0.);
+	double dccutoff = 5;
 
 	double fx = 0.0001;
 
@@ -640,13 +642,21 @@ inline __m128d sinhd(__m128d x) {
 
 	WDFIdealRLCHighshelf wdfhishelf[2];
 
-	WDFSpeakerImp wdfimp[2];
 
 	//ebers-molll
 	double	ebVx = 0.01;
 	double	ebVout = 0.0;
 	__m128d	_ebVx = _mm_set1_pd(0.01);
 	__m128d	_ebVout = _mm_set1_pd(0.00);
+	__m128d	_cbposVx = _mm_set1_pd(0.0011);
+	__m128d	_cbposVout = _mm_set1_pd(0.0001);
+	__m128d	_cbnegVx = _mm_set1_pd(0.0013);
+	__m128d	_cbnegVout = _mm_set1_pd(0.0001);
+
+	double	cbposVx = 0.01;
+	double	cbposVout = 0.0;
+	double	cbnegVx = 0.01;
+	double	cbnegVout = 0.0;
 
 	double Omega(double xn) {
 
