@@ -111,6 +111,10 @@ public:
 	/** ICustomView method: push a new audio sample into the ring buffer */
 	virtual void pushDataValue(double data) override;
 
+	/** add a new point to the circular buffer for painting
+	\param fSample the absolute value of the sample
+	*/
+	void addWaveDataPoint(double fSample);
 
 	/** override to draw, called if the view should draw itself*/
 	void draw(CDrawContext* pContext) override;
@@ -132,47 +136,11 @@ protected:
 	int circularBufferLength3 = 512;///< circular buffer length
 	CRect currentRect3;		///< the rect to draw into
 
-	CColor locol;
-	float locut = 0.;
-	float hicut = 0.;
-	float midcut = 0.;
-	double lofreq = 100.;
-	double hifreq = 3000.;
-
-	double ilocut = 0.;
-	double ihicut = 0.;
-	double imidcut = 0.;
-
-	double logain = 0.;
-	double midgain = 0.;
-	double higain = 0.;
-
-	double envA = 0.;
-	double envB = 0.;
-	double volmx = 0.;
-
-	std::vector<float> vv;
-	std::vector<float> zz;
-	std::vector<float> nn;
-
-	float s = 0.1f;
-	float s2 = 0.3f; float im, inter, lptransr, lptransi, bptransr, bptransi, hptransr, hptransi = 0.1f;
-	//double freq = 1/ lofreq;
-
-	float magni, magni2, magnih2, xax = 0.01f;
-	float zdx = 0.;
-
-	CRect siz = getViewSize();
-
-	float subd = 40.f;
-	float isubd = 1.f / 40.f;
-
 	float harr[50];
-
 	float harro[50];
 
-	float valold = 0.5f;
-	float val2 = 0.5f;
+	float inLeft = 0.5f;
+	float inRight = 0.5f;
 	int countrr = 0;
 
 	float rmsil = 0.5;
@@ -188,38 +156,20 @@ protected:
 	float diffrmsR = 0;
 	float diffrmsL = 0;
 
-	float vold = 0.0f;
-	CPoint a;
-	CPoint b;
 	float ifracp = 0.0f;
 	float ifrac = 0.0f;
 
-	float maxstoldo = 0.5f;
 	float clpmo = 0.1f;
-
-	float maxst = 0.5f;
-	float maxstt = 0.5f;
-
-	float maxstold = 0.2f;
 	float clpm = 0.1f;
-	CRect rr;
-	CRect srr;
-	float h = 1.f;
-
-	int x = 0;
-
-	UTF8String g;
-	//	CFontRef fntt = new CFontDesc("OCRStd", 14, 1);
-	CColor cc;
-	CColor cc2;
-
-	CColor cl;
-
-	CRect hold;
-
 
 private:
 	moodycamel::ReaderWriterQueue<double, 512>* dataQueue3 = nullptr; ///< lock-free queue for incoming data, sized to DATA_QUEUE_LEN in length
+
+	std::multimap<double, CColor> gradmap;
+	CGradient* gradient;
+
+	std::multimap<double, CColor> gradmapMid;
+	CGradient* gradientMid;
 
 };
 

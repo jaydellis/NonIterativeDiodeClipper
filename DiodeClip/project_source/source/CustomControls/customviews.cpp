@@ -241,7 +241,6 @@ void WaveView::draw(CDrawContext* pContext)
 
 
 
-
 SpectrumView2::SpectrumView2(const VSTGUI::CRect& size, IControlListener* listener, int32_t tag)
 	: CControl(size, listener, tag)
 {
@@ -259,6 +258,18 @@ SpectrumView2::SpectrumView2(const VSTGUI::CRect& size, IControlListener* listen
 	// --- create our incoming data-queue
 	dataQueue3 = new moodycamel::ReaderWriterQueue<double, 512>;
 
+
+	gradient = CGradient::create(CGradient::ColorStopMap(gradmapMid));
+
+	for (float i = 0; i < 1; i = i + 0.05) {
+		gradient->addColorStop(i, HslToRgba2( i * i * .7 -.04, .90, .5, 1.));
+	}
+
+	gradientMid = CGradient::create(CGradient::ColorStopMap(gradmapMid));
+
+	for (float i = 0; i < 1; i = i + 0.05) {
+		gradientMid->addColorStop(i, HslToRgba2( (1. - i )* .1 - .04, .90, .5, 1.));
+	}
 }
 
 SpectrumView2::~SpectrumView2()
@@ -268,6 +279,12 @@ SpectrumView2::~SpectrumView2()
 
 	if (circularBuffer3)
 		delete[] circularBuffer3;
+
+	if (gradient)
+		delete gradient;
+
+	if (gradientMid)
+		delete gradientMid;
 }
 
 
@@ -283,7 +300,6 @@ void SpectrumView2::pushDataValue(double data)
 void SpectrumView2::updateView()
 {
 
-
 	double audioSample = 0.0;
 	double max = 0.0;
 	bool success = dataQueue3->try_dequeue(audioSample);
@@ -293,55 +309,22 @@ void SpectrumView2::updateView()
 		while (success)
 		{
 			success = dataQueue3->try_dequeue(audioSample);
-			//	if (success) // && audioSample > max)
-				//	addWaveDataPoint((max));
-
-			if (!circularBuffer3) return;
-			circularBuffer3[writeIndex3] = audioSample;
-			writeIndex3++;
-			if (writeIndex3 > circularBufferLength3 - 1)
-				writeIndex3 = 0;
-
+				if (success) // && audioSample > max)
+					addWaveDataPoint(audioSample);
 		}
-
 		// --- add to circular buffer
-
 	}
-
 	// --- this will set the dirty flag to repaint the view
 	invalid();
-
 }
 
-void SpectrumView2::draw(CDrawContext* pContext)
+void SpectrumView2::addWaveDataPoint(double fSample)
 {
-
-	pContext->setDrawMode(kAntiAliasing);
-
-	// --- setup the backround rectangle
-
-	CRect size = getViewSize();
-
-	float sample = 0.0f;
-	float colaudio = 0.0f;
-
 	if (!circularBuffer3) return;
-	// --- step through buffer
-	int index = writeIndex3 - 1;
+	circularBuffer3[writeIndex3] = fSample;
 
-	if (index < 0)
-		index = circularBufferLength3 - 1;
-
-	pContext->setFillColor(CColor(0, 00, 0, 250)); // not grey was 200,200,200
-	//pContext->drawRect(size, kDrawFilled); 
-	auto pth = pContext->createGraphicsPath();
-	pth->addRoundRect(size, 5);
-	pContext->drawGraphicsPath(pth, CDrawContext::kPathFilledEvenOdd);
-	pth->forget();
-
-	for (int j = 0; j < circularBufferLength3; j++) {
-
-		sample = circularBuffer3[j];
+	//directly store our new values 
+		double sample = circularBuffer3[writeIndex3];
 
 		int id = int(sample);
 		sample = sample - id;
@@ -349,11 +332,11 @@ void SpectrumView2::draw(CDrawContext* pContext)
 		switch (id) {
 
 		case 2: {		// max audio in l;
-			val2 = sample * 10.;
+			inLeft = sample * 10.;
 			break;
 		}
 		case 4: {		// max audio in;
-			valold = sample * 10.;    //rr
+			inRight = sample * 10.;    //rr
 			break;
 		}
 		case 6: {		//  rms audio in;
@@ -364,11 +347,11 @@ void SpectrumView2::draw(CDrawContext* pContext)
 			rmsir = sample * 10.;
 			break;
 		}
-		case 10: {		// max audio in;
-			loutp = sample * 10. ;
+		case 10: {		// max audio out;
+			loutp = sample * 10.;
 			break;
 		}
-		case 12: {		// max audio in;
+		case 12: {		// max audio out;
 			routp = sample * 10.;
 			break;
 		}
@@ -380,7 +363,6 @@ void SpectrumView2::draw(CDrawContext* pContext)
 			rmsor = sample * 10.;
 			break;
 		}
-
 		case 20: {		// 
 			diffL = sample * 10.;
 			break;
@@ -401,233 +383,231 @@ void SpectrumView2::draw(CDrawContext* pContext)
 		default: { break; }
 		}
 
-	}
+	writeIndex3++;
+	if (writeIndex3 > circularBufferLength3 - 1)
+		writeIndex3 = 0;
+}
 
-	countrr++;
+void SpectrumView2::draw(CDrawContext* pContext)
+{
+	pContext->setDrawMode(kAntiAliasing);
 
-	if (countrr > 30) { countrr = 0; }
+	// --- setup the backround rectangle
+	CRect rect = getViewSize();
+	pContext->setFillColor(kBlackCColor);
 
-	pContext->setLineWidth(.5);  // .5
+	if (!circularBuffer3) return;
+	// --- step through buffer
+	int index = writeIndex3 - 1;
 
-	harr[countrr] = ((1.f - (FastMin(valold, val2))));
+	CGraphicsPath* pth = pContext->createGraphicsPath();
+	pth->addRoundRect(rect, 5);
+	pContext->drawGraphicsPath(pth, CDrawContext::kPathFilled);
+	pth->forget();
+	
+	const int holdtime = 28;				// peak hold time in Frames
+
+	if (countrr > holdtime) { countrr = 0; }
+
+	harr[countrr] = ((1.f - (FastMin(inLeft, inRight))));
 	harro[countrr] = ((1.f - (FastMin(loutp, routp))));
 
-
-	for (int j = 0; j < 30; j++) {			// max j is hold time
+	for (int j = 0; j < holdtime; j++) {			
 		if (clpm < harr[j])
-		{
-			clpm = harr[j];
-		}
+		{	clpm = harr[j]; 	}
 
 		if (clpmo < harro[j])
-		{
-			clpmo = harro[j];
-		}
+		{	clpmo = harro[j];	}
 	}
 
-	rr = getViewSize();
+	rect.setWidth(rect.getWidth()*.4);			// .4 , .2, .4 split for the three segments
 
-	rr.setWidth(rr.getWidth()*.4);			// .4 , .2, .4 split
-
-	//rr.inset(rr.getWidth()*.5, 0);
-
-	rr.inset(0, 15);
-	rr.offset(0, -14);
-
-	srr = rr;
-	srr.inset(3, 0);
-	srr.offset(1, 9);
-
-	const float roof =   18.;
-	const float segments = 80;
-
-	for (int i = 0; i <= segments; i++) {			//input l/r meters 
-
-		ifrac = i * (1. / segments);
-		ifracp = (i + 1) * (1. / segments);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
-
-
-		if (i < (segments + (roof - (2.5f*val2 * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
-		}
-		else {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
-		}
-
-		if (i == int(segments + (roof - (2.5f*(1.f - clpm) * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
-		}
-
-		if (i == int(segments + (roof - (2.5f*rmsil* segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
-		}
-
-		pContext->setFillColor(cc);
-
-		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
-		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
-
-		pContext->drawRect(CRect(srr.getLeftCenter().x, b.y, srr.getCenter().x, a.y), kDrawFilled);		//L
-
-
-		if (i < (segments + (roof - (2.5 *valold * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
-		}
-		else {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
-		}
-		if (i == int(segments + (roof - (2.5f*(1.f - clpm) * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
-		}
-
-		if (i == int(segments + (roof - (2.5f*rmsir * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
-		}
-
-		pContext->setFillColor(cc);
-
-		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
-		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
-
-		pContext->drawRect(CRect(srr.getCenter().x, b.y, srr.getBottomRight().x, a.y), kDrawFilled);		//R
-	}
-
-	CRect midrr = srr;
-	midrr.offset(srr.getWidth() + 2.5, .0);
-
-	srr.offset(srr.getWidth() + 8 + srr.getWidth()*.5, 0);
-
-	for (int i = 0; i <= segments; i++) {			//output l/r meters
-
-		ifrac = i * (1. / segments);
-		ifracp = (i + 1) * (1. / segments);		//	float randv = float(rand()) / RAND_MAX;  float randb = float(rand()) / RAND_MAX;
-
-
-		if (i < (segments + (roof - (2.5f*loutp * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
-		}
-		else {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
-		}
-
-		if (i == int(segments + (roof - (2.5f*(1.f - clpmo) * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
-		}
-
-		if (i == int(segments + (roof - (2.5f*rmsol* segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
-		}
-
-		pContext->setFillColor(cc);
-
-		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
-		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
-
-		pContext->drawRect(CRect(srr.getLeftCenter().x, b.y, srr.getCenter().x, a.y), kDrawFilled);
-
-
-		if (i < (segments + (roof - (2.5f*routp * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .45f, .5f);
-		}
-		else {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .15f, 1.f);
-		}
-		if (i == int(segments + (roof - (2.5f*(1.f - clpmo) * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .7f);
-		}
-		if (i == int(segments + (roof - (2.5f*rmsor * segments)))) {
-			cc = HslToRgba2((.9f - ifrac)*.60f, .99f, .5f, .75f);
-		}
-
-		pContext->setFillColor(cc);
-
-		b(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifrac));
-		a(srr.getBottomLeft().x, srr.getBottomLeft().y - srr.getHeight()*(ifracp));
-
-		pContext->drawRect(CRect(srr.getCenter().x, b.y, srr.getBottomRight().x, a.y), kDrawFilled);
-	}
+	//leave vertical room for text
+	rect.inset(0, 13);				
+	rect.offset(0, -7);				
 	
+	//left rect
+	CRect inrect = rect;			
+	inrect.inset(2, 0);				//inset a horizontal space
+	inrect.offset(0.5, 0);
 
-	midrr.setWidth(size.getWidth() * .2);
-//	midrr.offset(0, 0);
+	//right rectr
+	CRect outrect = inrect;		
+	outrect.offset(1.5 * inrect.getWidth() + 4, 0);
+
+
+	CGraphicsPath* gradpath = pContext->createGraphicsPath();
+	gradpath->addRect(inrect);
+	gradpath->addRect(outrect);
+	pContext->fillLinearGradient(gradpath, *gradient, inrect.getTopCenter(), inrect.getBottomCenter());
+	gradpath->forget();
+
+	//midrect
+	CRect midrr = inrect;
+	midrr.offset(inrect.getWidth() + 2, .0);
+	midrr.setWidth(inrect.getWidth() * .5);
+
+	CGraphicsPath* mgradpath = pContext->createGraphicsPath();
+	mgradpath->addRect(midrr);
+	pContext->fillLinearGradient(mgradpath, *gradientMid, midrr.getTopCenter(), midrr.getBottomCenter());
+	mgradpath->forget();
+
+
+	inrect.offset(1, 0);			///Gradient seems off by 1 pixel
+	outrect.offset(1, 0);
+	midrr.offset(1, 0);
+
+
+	pContext->setFrameColor(kBlackCColor);
+	pContext->setLineWidth(.5);
+
+	const float roof =   12.;			// start db 0 = 24db
+	const float segments = 60;
+	const float invsegment = 1. / segments;
+	const float scale    = 1.7;			// meter vertical axis zoom
+	const float rmsscale = 1.7;
+
+	CColor fillcolour = kBlackCColor;
+	const float drkshade = .8;
+	const float midshade = 0.3;
+	const float lightshade = 0.1;
+	const float ligthestshade = 0.0;
+
+	for (int i = 0; i < segments; i++) {
+
+		ifrac = i * invsegment;
+		ifracp = (i + 1) * invsegment;
+
+		////input l/r meters 
+		if (i == int(segments + (  roof - (scale*(1. - clpm) * segments)))) {			//Peak Hold Left
+			fillcolour.setNormAlpha(ligthestshade );
+		}
+		else if (i > (segments + ( roof - (scale * inLeft * segments))) ){			//Shadow above peak
+			fillcolour.setNormAlpha(drkshade);	
+		}
+		else if ( ( i > (segments + ( roof - (scale*rmsil* segments))) ) ) {			//Lit
+			fillcolour.setNormAlpha(midshade);
+		}
+		else  {																			//RMS
+			fillcolour.setNormAlpha(lightshade);
+		}	
+		
+		pContext->setFillColor(fillcolour);
+		pContext->drawRect(CRect(inrect.getLeftCenter().x - 2, inrect.getBottomLeft().y - inrect.getHeight()*(ifrac),
+									inrect.getCenter().x + .5,  inrect.getBottomLeft().y - inrect.getHeight()*(ifracp)), kDrawFilledAndStroked);
+
+			////input right
+		if (i == int(segments + ( roof - (scale*(1. - clpm) * segments)))) {			//Peak Hold
+			fillcolour.setNormAlpha(ligthestshade);
+		}
+		else if (i > (segments + ( roof - (scale * inRight * segments)))) {			//Shadow above peak
+			fillcolour.setNormAlpha(drkshade);
+		}
+		else if ((i > (segments + ( roof - (scale*rmsir* segments))))) {			//Lit
+			fillcolour.setNormAlpha(midshade);
+		}
+		else {																		//RMS
+			fillcolour.setNormAlpha(lightshade);
+		}
+
+		pContext->setFillColor(fillcolour);
+		pContext->drawRect(CRect(inrect.getCenter().x -.5 , inrect.getBottomLeft().y - inrect.getHeight()*(ifrac),
+			inrect.getTopRight().x + .5, inrect.getBottomLeft().y - inrect.getHeight()*(ifracp)), kDrawFilledAndStroked);
+
+
+		////Output Meters
+		if (i == int(segments + ( roof - (scale*(1. - clpmo) * segments)))) {			//Peak Hold Left
+			fillcolour.setNormAlpha(ligthestshade);
+		}
+		else if (i > (segments + ( roof - (scale * loutp * segments)))) {			//Shadow above peak
+			fillcolour.setNormAlpha(drkshade);
+		}
+		else if ((i > (segments + ( roof - (scale*rmsol* segments))))) {			//Lit
+			fillcolour.setNormAlpha(midshade);
+		}
+		else {																			//RMS
+			fillcolour.setNormAlpha(lightshade);
+		}
+
+		pContext->setFillColor(fillcolour);
+		pContext->drawRect(CRect(outrect.getLeftCenter().x - 2, outrect.getBottomLeft().y - outrect.getHeight()*(ifrac),
+			outrect.getCenter().x + .5, outrect.getBottomLeft().y - outrect.getHeight()*(ifracp)), kDrawFilledAndStroked);
+
+
+			//// Output Right
+		if (i == int(segments + ( roof - (scale*(1. - clpmo) * segments)))) {			//Peak Hold Right
+			fillcolour.setNormAlpha(ligthestshade);
+		}
+		else if (i > (segments + ( roof - (scale * routp * segments)))) {			//Shadow above peak
+			fillcolour.setNormAlpha(drkshade);
+		}
+		else if ((i > (segments + ( roof - (scale* rmsor * segments))))) {			// rms lit
+			fillcolour.setNormAlpha(midshade);
+		}
+		else {																		//RMS
+			fillcolour.setNormAlpha(lightshade);
+		}
+
+		pContext->setFillColor(fillcolour);
+		pContext->drawRect(CRect(outrect.getCenter().x - .5, outrect.getBottomLeft().y - outrect.getHeight()*(ifrac),
+			outrect.getTopRight().x + .5, outrect.getBottomLeft().y - outrect.getHeight()*(ifracp)), kDrawFilledAndStroked);
+	}
 
 	for (int i = 0; i <= segments; i++) {				// diff meters
-		ifrac = i * (1. / segments);
-		ifracp = (i + 1) * (1. / segments);
+		ifrac = i * invsegment;
+		ifracp = (i + 1) * invsegment;
 
-	
+		//left difference meter
+		if (i > (segments + (1 - (rmsscale*(diffrmsL) * segments)))) {											//RMS
+			fillcolour.setNormAlpha(ligthestshade);
+		}
+		else if (i > (segments + (1 - (rmsscale*(diffL)* segments)))) {
+			fillcolour.setNormAlpha(midshade);																			//Peak
+		}	
+		else {
+			fillcolour.setNormAlpha(drkshade);
+		}
 
-		if (i > (segments + (1 - (2.5f*(diffrmsL) * segments)))) {						//L
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, (1.f - ifrac)*.55f + .4);
+		pContext->setFillColor(fillcolour);
+		pContext->drawRect(CRect(midrr.getBottomLeft().x-1, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac),
+								midrr.getBottomCenter().x +.5, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp)), kDrawFilledAndStroked);
+
+		//right difference meter
+		if (i > (segments + (1 - (rmsscale*(diffrmsR)* segments)))) {											//RMS
+			fillcolour.setNormAlpha(lightshade);
+		}
+		else if (i > (segments + (1 - (rmsscale*(diffR)* segments)))) {
+			fillcolour.setNormAlpha(midshade);																			//Peak
 		}
 		else {
-			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac , (1.f - ifrac)*.50f + .4);
+			fillcolour.setNormAlpha(drkshade);
 		}
 
-		pContext->setFillColor(cc);
-
-		b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
-		a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
-
-		pContext->drawRect(CRect(midrr.getBottomLeft().x, b.y, midrr.getBottomCenter().x, a.y), kDrawFilled);
-
-		if (i > (segments + (1 - (2.5f*(diffL) * segments)))) {
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45, (1.f - ifrac)*.55f+.4);
-
-			pContext->setFillColor(cc);
-
-			b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
-			a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
-
-			pContext->drawRect(CRect(midrr.getBottomLeft().x, b.y, midrr.getBottomCenter().x, a.y), kDrawFilled);
-		}
-
-
-
-		if (i > (segments + (1 - (2.5f*(diffrmsR) * segments)))) {				//R
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f  * ifrac + .05, (1.f - ifrac)*.55f + .4);
-		}
-		else {
-			cc = HslToRgba2((1.f - ifrac)*.05f + .01f, .99f, .15f * ifrac, (1.f - ifrac)*.50f + .4);
-		}
-
-		pContext->setFillColor(cc);
-
-		b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
-		a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
-
-		pContext->drawRect(CRect(midrr.getBottomCenter().x, b.y, midrr.getBottomRight().x, a.y), kDrawFilled);
-
-		if (i > (segments + (1 - (2.5f*(diffR) * segments)))) {
-			cc = HslToRgba2((1.f - ifrac)*.05f, .99f, .45f, .55f);
-
-			pContext->setFillColor(cc);
-
-			b(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac));
-			a(midrr.getBottomLeft().x, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp));
-
-			pContext->drawRect(CRect(midrr.getBottomCenter().x, b.y, midrr.getBottomRight().x, a.y), kDrawFilled);
-		}
-
+		pContext->setFillColor(fillcolour);
+		pContext->drawRect(CRect(midrr.getBottomCenter().x -.5, midrr.getBottomLeft().y - midrr.getHeight()*(ifrac),
+							   	midrr.getBottomRight().x+1, midrr.getBottomLeft().y - midrr.getHeight()*(ifracp)), kDrawFilledAndStroked);
 	}
 
+
+	//text output
+	const float fontsize = 14;
+	const CFontRef fntt = new CFontDesc("OCRStd", fontsize, 1);
+	pContext->setFillColor(kWhiteCColor);
+
+	UTF8String readout;
 	std::stringstream strng;
 	strng << std::fixed;
 	strng << std::setprecision(1);
 
 	if (clpm < .999) {										// in Peak
-		strng << (-(1. - (clpm)) * 100 + 24);
-		g = strng.str();
+		strng << (-(1. - (clpm)) * 100. + 24.);
+		readout = strng.str();
 	}
-	else g = "24+";
+	else readout = "24+";
 
-	const CFontRef fntt = new CFontDesc("OCRStd", 14, 1);
+	CPoint textpos(inrect.getCenter().x - (fontsize* readout.length() * .25f) + 2, getViewSize().getBottomCenter().y - (.5*fontsize) + 2);
+	pContext->drawString(readout, textpos, true);
 
-	h = 14;
-
-	CPoint cp(rr.getCenter().x - (h* g.length() * .25f) + 2, getViewSize().getBottomCenter().y - (.5*h) + 2);
-	pContext->setFillColor(kWhiteCColor);
-	pContext->drawString(g, cp, true);
 
 	std::stringstream strng2;
 	strng2 << std::fixed;
@@ -635,17 +615,20 @@ void SpectrumView2::draw(CDrawContext* pContext)
 
 	if (clpmo < .99) {									// out Peak
 	strng2 << ((-(1. - (clpmo)) * 100 + 24));
-	g = strng2.str();
+	readout = strng2.str();
 	}
-	else g = "24+";
+	else readout = "24+";
 
-	cp(srr.getCenter().x - (h* g.length() * .25f), getViewSize().getBottomCenter().y - (.5*h) + 2);
-	pContext->drawString(g, cp, true);
+	textpos(outrect.getCenter().x - (fontsize* readout.length() * .25f), getViewSize().getBottomCenter().y - (.5*fontsize) + 2);
+	pContext->drawString(readout, textpos, true);
 
 	delete fntt;
 
-	clpm  = FastMin((clpm - .0065f), 1.f);			//FallTimes
+	// --- Peak Hold Fall Time
+	clpm  = FastMin((clpm - .0065f), 1.f);			
 	clpmo = FastMin((clpmo - .0065f), 1.f);
+
+	countrr++;
 
 	// --- wrap the index value if neede
 	if (index < 0)

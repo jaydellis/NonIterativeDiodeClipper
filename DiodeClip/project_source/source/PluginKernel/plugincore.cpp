@@ -218,7 +218,7 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 		dthreshold    = pow(10.0, threshold_p  * .05);
 		_threshold    = _mm_set1_pd( dthreshold );
 
-		crossover = pow(10.0, overbias_p  * .05);
+		crossover = overbias_p; //pow(10.0, overbias_p  * .05) - 1;
 		_overbias = _mm_set1_pd( crossover );
 
 	WDFParameters para;
@@ -683,7 +683,6 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 			for (int i = 0; i < oversampling_p; i++) {   // c+
 
-			//	xin = k * c1 * upss[channel].processUnrolled8p(xinfll[i]);
 						xin = ups[channel].filter( xin * ( i < 1));
 
 /*
@@ -780,11 +779,11 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 	}
 		//meters
 		{
-			envinmi     = ( FastAbs( meterinl  * ingainsm)) - zmiL;  //meter in
+			envinmi     = ( FastAbs( meterinl  * ingainsm * ampgainsm)) - zmiL;  //meter in
 			envpolmi    = ((envinmi > 0.0)) + ((envinmi < 0.0) * relmi);
 			zmiL = zmiL + (envinmi * envpolmi);
 
-			envinmiR    = ( FastAbs( meterinr * ingainsm)) - zmiR;			// 1 was gainsm
+			envinmiR    = ( FastAbs( meterinr * ingainsm * ampgainsm)) - zmiR;			// 1 was gainsm
 			envpolmiR   = ((envinmiR > 0.0)) + ((envinmiR < 0.0) * relmi);
 			zmiR = zmiR + (envinmiR * envpolmiR);
 
@@ -796,8 +795,8 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			envpolmi2R = ((envinmi2R > 0.0)) + ((envinmi2R < 0.0) * relmi);
 			zmi2R = zmi2R + (envinmi2R * envpolmi2R);   //.00049				//meter out
 
-			rmsil = rmsil * rmse + (1. - rmse) * ((meterinl *  ingainsm) * ( meterinl *  ingainsm) );			//rms l	
-			rmsir = rmsir * rmse + (1. - rmse) * ((meterinr *  ingainsm) * (meterinr * ingainsm ) );			//rms r
+			rmsil = rmsil * rmse + (1. - rmse) * ((meterinl *  ingainsm*ampgainsm) * ( meterinl *  ingainsm) );			//rms l	
+			rmsir = rmsir * rmse + (1. - rmse) * ((meterinr *  ingainsm*ampgainsm) * (meterinr * ingainsm ) );			//rms r
 
 			rmsol = rmsol * rmse + (1. - rmse) * ((xout* outgainsm)  * (xout  * outgainsm));		//rms lout
 			rmsor = rmsor * rmse + (1. - rmse) * ((xoutR* outgainsm) * (xoutR * outgainsm));		//rms rout
@@ -1147,15 +1146,15 @@ bool PluginCore::initPluginParameters()
 
 	PluginParameter* piParam = nullptr;
 
-	piParam = new PluginParameter(controlID::inputgain, "input gain", "dBs", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::inputgain, "input gain", "dB", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
 	piParam->setBoundVariable(&inputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::outputgain, "output gain", "dBs", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::outputgain, "output gain", "dB", controlVariableType::kDouble, -24.0, 24., 0.0, taper::kLinearTaper);
 	piParam->setBoundVariable(&outputgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohms", controlVariableType::kInt, 400000., 1., 500., taper::kLogTaper);
+	piParam = new PluginParameter(controlID::resistor, "resistance", "Ohm", controlVariableType::kInt, 400000., 1., 500., taper::kLogTaper);
 	piParam->setBoundVariable(&resistor_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
@@ -1171,7 +1170,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 15, 55, 33, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 15, 65, 33, taper::kLinearTaper);
 	piParam->setBoundVariable(&thermalvoltage_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1184,7 +1183,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setIsDiscreteSwitch(true);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::assymetry, "dc bias", " V", controlVariableType::kDouble, 0, 1., 0.6, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::assymetry, "dc bias", "V", controlVariableType::kDouble, 0, 1., 0.66, taper::kLinearTaper);
 	piParam->setBoundVariable(&assym_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1197,27 +1196,27 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&sse_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::ampgain, "drive", " dBs", controlVariableType::kDouble, 0, 24., 0., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::ampgain, "drive", "dB", controlVariableType::kDouble, -12, 24., 0., taper::kLinearTaper);
 	piParam->setBoundVariable(&ampgain_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::ampVt, "vt ", " mV", controlVariableType::kDouble, 0.1, 10., 0.5, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::ampVt, "vt ", "mV", controlVariableType::kDouble, 0.1, 10., 0.5, taper::kLinearTaper);
 	piParam->setBoundVariable(&ampVt_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::cathodeR, " ", " x", controlVariableType::kDouble, .00, 1., 0., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::cathodeR, " ", "x", controlVariableType::kDouble, .00, 1., 0., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&cathodeR_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::threshold, "threshold", " dBs", controlVariableType::kDouble, -64, 14., 0., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::threshold, "threshold", "dB", controlVariableType::kDouble, -48, 12., 0., taper::kLinearTaper);
 	piParam->setBoundVariable(&threshold_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::overbias, "overbias", " dBs", controlVariableType::kDouble, -24., 24., 0., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::overbias, "overbias", "V", controlVariableType::kDouble, -1., 1., 0., taper::kLinearTaper);
 	piParam->setBoundVariable(&overbias_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::dccutoff, "dc cut", " Hz", controlVariableType::kDouble, 1., 200., 10., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::dccutoff, "dc cut", "Hz", controlVariableType::kDouble, 1., 200., 10., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&dccut_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
