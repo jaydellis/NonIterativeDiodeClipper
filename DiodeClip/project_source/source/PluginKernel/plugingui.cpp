@@ -1833,6 +1833,13 @@ CView* PluginGUI::createUserCustomView(std::string viewname, const CRect rect, I
 
 	}
 
+
+	if (viewname.compare("CustomKnobView2") == 0)
+	{
+		// --- create our custom view
+		return new CustomKnobView2(rect, listener, tag);
+	}
+
 	return nullptr;
 }
 
@@ -1980,6 +1987,80 @@ CView* PluginGUI::createView(const UIAttributes& attributes, const IUIDescriptio
 
         return customKnob;
     }
+
+	if (viewname == "CustomKnobView2")
+	{
+		// --- our wave view testing object
+		const std::string* sizeString = attributes.getAttributeValue("size");
+		const std::string* originString = attributes.getAttributeValue("origin");
+		const std::string* offsetString = attributes.getAttributeValue("background-offset");
+		const std::string* tagString = attributes.getAttributeValue("control-tag");
+		const std::string* bitmapString = attributes.getAttributeValue("bitmap");
+		const std::string* heightOneImageString = attributes.getAttributeValue("height-of-one-image");
+		const std::string* subPixmapsString = attributes.getAttributeValue("sub-pixmaps");
+		if (!sizeString) return nullptr;
+		if (!originString) return nullptr;
+		// if (!offsetString) return nullptr;
+		if (!tagString) return nullptr;
+		if (!bitmapString) return nullptr;
+		if (!heightOneImageString) return nullptr;
+		if (!subPixmapsString) return nullptr;
+
+		// --- create the rect
+		CPoint origin;
+		CPoint size;
+		parseSize(*sizeString, size);
+		parseSize(*originString, origin);
+
+		const CRect rect(origin, size);
+
+		// --- get listener
+		IControlListener* listener = description->getControlListener(tagString->c_str());
+
+		// --- get tag
+		int32_t tag = description->getTagForName(tagString->c_str());
+
+		// --- subPixmaps
+		int32_t subPixmaps = strtol(subPixmapsString->c_str(), 0, 10);
+
+		// --- height of one image
+		CCoord heightOfOneImage = strtod(heightOneImageString->c_str(), 0);
+
+		// --- bitmap
+		std::string BMString = *bitmapString;
+		BMString += ".png";
+		UTF8StringPtr bmp = BMString.c_str();
+		CResourceDescription bmpRes(bmp);
+		CBitmap* pBMP = new CBitmap(bmpRes);
+
+		// --- offset
+		CPoint offset(0.0, 0.0);
+		if (offsetString)
+			parseSize(*offsetString, offset);
+
+		const CPoint offsetPoint(offset);
+
+		PluginParameter* piParam = getGuiControlWithTag(tag);
+		if (!piParam)
+		{
+			if (pBMP) pBMP->forget();
+			return nullptr;
+		}
+
+		CustomKnobView2* customKnob = new CustomKnobView2(rect, listener, tag);
+
+		// --- if the view has the ICustomView interface, we register it with the plugin for updates
+		if (hasICustomView(customKnob))
+		{
+			if (guiPluginConnector)
+				guiPluginConnector->registerCustomView(viewname, (ICustomView*)customKnob);
+		}
+
+		if (pBMP) pBMP->forget();
+
+		return customKnob;
+	}
+
 
     // --- BUILT-IN CUSTOM VIEWS
     int nTP = (int)viewname.find("TrackPad_");

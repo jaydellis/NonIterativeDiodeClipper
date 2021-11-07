@@ -400,10 +400,13 @@ void SpectrumView2::draw(CDrawContext* pContext)
 	// --- step through buffer
 	int index = writeIndex3 - 1;
 
-	CGraphicsPath* pth = pContext->createGraphicsPath();
+	SharedPointer<CGraphicsPath> pth = owned(pContext->createGraphicsPath());
+	if (pth == nullptr)
+		return;
+//	CGraphicsPath* pth = pContext->createGraphicsPath();
 	pth->addRoundRect(rect, 5);
 	pContext->drawGraphicsPath(pth, CDrawContext::kPathFilled);
-	pth->forget();
+//	pth->forget();
 	
 	const int holdtime = 28;				// peak hold time in Frames
 
@@ -435,22 +438,25 @@ void SpectrumView2::draw(CDrawContext* pContext)
 	CRect outrect = inrect;		
 	outrect.offset(1.5 * inrect.getWidth() + 4, 0);
 
-
-	CGraphicsPath* gradpath = pContext->createGraphicsPath();
+	SharedPointer<CGraphicsPath> gradpath = owned(pContext->createGraphicsPath());
+	if (gradpath == nullptr) return;
+	//CGraphicsPath* gradpath = pContext->createGraphicsPath();
 	gradpath->addRect(inrect);
 	gradpath->addRect(outrect);
 	pContext->fillLinearGradient(gradpath, *gradient, inrect.getTopCenter(), inrect.getBottomCenter());
-	gradpath->forget();
+//	gradpath->forget();
 
 	//midrect
 	CRect midrr = inrect;
 	midrr.offset(inrect.getWidth() + 2, .0);
 	midrr.setWidth(inrect.getWidth() * .5);
 
-	CGraphicsPath* mgradpath = pContext->createGraphicsPath();
+	SharedPointer<CGraphicsPath> mgradpath = owned(pContext->createGraphicsPath());
+	if (mgradpath == nullptr) return;
+//	CGraphicsPath* mgradpath = pContext->createGraphicsPath();
 	mgradpath->addRect(midrr);
 	pContext->fillLinearGradient(mgradpath, *gradientMid, midrr.getTopCenter(), midrr.getBottomCenter());
-	mgradpath->forget();
+//	mgradpath->forget();
 
 
 	inrect.offset(1, 0);			///Gradient seems off by 1 pixel
@@ -927,15 +933,15 @@ void CustomKnobView::sendMessage(void* data)
     // --- example of messaging: plugin core send message, we acknowledge
     if (viewMessage->message == MESSAGE_QUERY_CONTROL)
     {
-        if (viewMessage->queryString.compare("Hello There!") == 0)
-        {
-            viewMessage->replyString.assign("I'm Here!!");
-            viewMessage->messageData = this; // <– example of VERY risky thing to do; not recommended
-        }
+     //   if (viewMessage->queryString.compare("Hello There!") == 0)
+   //     {
+        //    viewMessage->replyString.assign("I'm Here!!");
+         //   viewMessage->messageData = this; // <– example of VERY risky thing to do; not recommended
+    //    }
     }
 
     // --->> CustomViewMessage has =operator
-    dataQueue->enqueue(*viewMessage);
+	  dataQueue->enqueue(*viewMessage);
 }
 
 void CustomKnobView::updateView()
@@ -944,19 +950,207 @@ void CustomKnobView::updateView()
     bool success = dataQueue->try_dequeue(viewMessage);
     while(success)
     {
-        // --- not connected, but example of setting control's appearance via message
-        //     you could use this to also show/hide the control, or move it to a new location
-        if(viewMessage.message == MESSAGE_SET_CONTROL_ALPHA)
-        {
-            setAlphaValue((float)viewMessage.controlAlpha);
-        }
-
         // --- keep popping the queue in case there were multiple message insertions
-        success = dataQueue->try_dequeue(viewMessage);
+		success = dataQueue->try_dequeue(viewMessage); 
+		str = viewMessage.queryString;
     }
 
     // --- force redraw
     invalid();
+}
+
+void CustomKnobView::draw(CDrawContext* pContext) {
+
+	const float fontsize = 22;
+	const CFontRef fntt = new CFontDesc("Arial", fontsize, 1);
+	pContext->setFillColor(kBlackCColor);
+
+	pContext->drawEllipse(getViewSize(), kDrawStroked);
+
+	CPoint point = getViewSize().getCenter();
+	pContext->drawString(str, point, true);
+
+	delete fntt;
+	return;
+}
+
+
+
+
+CustomKnobView2::CustomKnobView2(const VSTGUI::CRect& size, IControlListener* listener, int32_t tag) : CKnob(size, nullptr, 0, nullptr, nullptr)
+{
+	// --- ICustomView
+	// --- create our incoming data-queue
+	dataQueue = new moodycamel::ReaderWriterQueue<CustomViewMessage, 32>;
+}
+
+CustomKnobView2::~CustomKnobView2(void)
+{
+	if (dataQueue) delete dataQueue;
+}
+
+void CustomKnobView2::sendMessage(void* data)
+{
+	CustomViewMessage* viewMessage = (CustomViewMessage*)data;
+
+	// --- example of messaging: plugin core send message, we acknowledge
+	if (viewMessage->message == MESSAGE_QUERY_CONTROL)
+	{
+		//   if (viewMessage->queryString.compare("Hello There!") == 0)
+	  //     {
+		   //    viewMessage->replyString.assign("I'm Here!!");
+			//   viewMessage->messageData = this; // <– example of VERY risky thing to do; not recommended
+	   //    }
+	}
+
+	// --->> CustomViewMessage has =operator
+	dataQueue->enqueue(*viewMessage);
+}
+
+void CustomKnobView2::updateView()
+{
+	CustomViewMessage viewMessage;
+	bool success = dataQueue->try_dequeue(viewMessage);
+	while (success)
+	{
+		// --- keep popping the queue in case there were multiple message insertions
+		success = dataQueue->try_dequeue(viewMessage);
+		str = viewMessage.queryString;
+	}
+
+	// --- force redraw
+	invalid();
+}
+
+void CustomKnobView2::draw(CDrawContext* pContext) {
+
+	pContext->setDrawMode(kAntiAliasing | kNonIntegralMode);
+	
+	CRect r = getViewSize();
+	r.inset(3,3);
+	CCoord w = r.getWidth();
+	CCoord h = r.getHeight();	
+	
+//	pContext->setFrameColor(kGreyCColor);
+//	pContext->drawGraphicsPath(patho, CDrawContext::kPathStroked);		// arc groove
+
+
+	////init - generate radial marks
+	if (getViewSize() != oldsize) 
+	{	
+		mrkpth = owned(pContext->createGraphicsPath());
+
+	//	mrkpth->beginSubpath(r.getCenter());
+
+		for (int i = 0; i < 11; i++) {
+			float ifrac = float(i) / 10;
+
+		//	mrkpth->addArc(r, -225, -225 + 270 * ifrac, 1);
+			CPoint  mrk(r.getCenter().x + .5*r.getWidth()*sin(((1.5* ifrac) - .75) * Constants::pi),
+						r.getCenter().y - .5*r.getHeight()*cos(((1.5* ifrac) - .75) * Constants::pi));
+
+			mrkpth->addEllipse(CRect(mrk, CPoint(1, 1)));
+	//		mrkpth->addLine(r.getCenter());
+//			pContext->drawLine(mrk, r.getCenter());
+		}
+
+	//	mrkpth->addArc(r, -225, -225 + 270 * 1, 1);
+	//	mrkpth->closeSubpath();
+		oldsize = getViewSize();
+	}
+	
+	pContext->setLineWidth(2);
+
+	//outer arc
+	auto path = owned(pContext->createGraphicsPath());
+	auto path2 = owned(pContext->createGraphicsPath());
+
+	path->addArc(r, -225, -225 + 270 * getValueNormalized(), 1);
+	path2->addArc(r, -225 + 270 * getValueNormalized(), 45, 1);
+
+	pContext->setFrameColor(coronaColor); 
+//	pContext->drawGraphicsPath(path, CDrawContext::kPathStroked);       // arc value shaded
+
+
+	CColor transblck(kBlackCColor);
+	transblck.setNormAlpha(.3);
+	pContext->setFrameColor(transblck);
+	pContext->drawGraphicsPath(mrkpth, CDrawContext::kPathStroked);
+
+	//back shadow
+	CRect rr = r;
+	rr.inset(5,5); rr.offset(0, 3);
+	auto pathsh = owned(pContext->createGraphicsPath());
+	SharedPointer <CGradient> shd = owned(CGradient::create(0.8, 1, CColor( 0, 00, 00, 70), CColor(0, 0, 0, 0)));
+	pathsh->addEllipse(rr);
+	pContext->fillRadialGradient(pathsh, *shd, rr.getCenter(), .5*rr.getWidth());
+
+	//cap
+	CColor drkcap = getColorShadowHandle();
+	double hue, sat, lum;
+	drkcap.toHSV(hue, sat, lum);
+	lum *= 0.85;
+	drkcap.fromHSV(hue, sat, lum);
+
+	CLineStyle lineStyle(kLineOnOffDash);
+	lineStyle.getDashLengths() = coronaLineStyle.getDashLengths();
+	lineStyle.setLineCap(CLineStyle::kLineCapRound);
+	pContext->setFrameColor(drkcap);
+	pContext->setLineStyle(lineStyle);
+	pContext->setLineWidth(6);
+	CRect inner_r = r;
+	inner_r.inset(9, 9);
+
+	r.inset(7, 7);
+	pContext->setFillColor(getColorShadowHandle());
+
+	// cap
+	pContext->drawEllipse(r, kDrawFilled);
+
+	// grooves
+	pContext->drawArc(inner_r, 270 * getValueNormalized(), 270 * getValueNormalized() - 1, kDrawStroked);
+
+
+	//cap gradient
+	auto pathsh3 = owned(pContext->createGraphicsPath());
+	SharedPointer <CGradient> shd3 = owned(CGradient::create(.0, .9, CColor(250, 250, 250, 80), CColor(0, 0, 0, 0)));
+	pathsh3->addEllipse(r);
+	pContext->fillLinearGradient(pathsh3, *shd3, r.getTopLeft(), r.getBottomRight());
+
+	r.inset(-5, -5);
+	r.offset(2, 3);
+	//	pContext->setFillColor(kGreyCColor);
+	auto pathsh2 = owned(pContext->createGraphicsPath());
+	SharedPointer <CGradient> shd2 = owned(CGradient::create(.7, 1., CColor(0, 00, 00, 80), CColor(0, 0, 0, 0)));
+	pathsh2->addEllipse(r);
+	pContext->fillRadialGradient(pathsh2, *shd2, r.getCenter(), r.getWidth()*.5f);
+
+
+	//handle
+	CPoint where;
+	valueToPoint(where);
+
+	CPoint origin(getViewSize().getWidth() * .5, getViewSize().getHeight() * .5 );
+	where.offset(getViewSize().left - 1, getViewSize().top);
+	origin.offset(getViewSize().left - 1, getViewSize().top);
+
+	pContext->setLineWidth(handleLineWidth);
+	pContext->setLineStyle(CLineStyle(CLineStyle::kLineCapRound));
+	//	pContext->drawLine(where, origin);
+
+	where.offset(1, -1);
+	origin.offset(1, -1);
+
+	CPoint wh2(((where.x * .8 + origin.x * .2)), ((where.y * .8 + origin.y * .2)));
+
+	pContext->setFrameColor(colorHandle);
+	pContext->drawLine(where, wh2);				
+
+
+
+	setDirty(false);
+
+	return;
 }
 
 

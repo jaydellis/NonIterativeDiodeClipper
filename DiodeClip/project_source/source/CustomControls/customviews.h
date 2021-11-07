@@ -443,6 +443,11 @@ public:
 	/** ICustomView method: send a message to the object (!) */
 	virtual void sendMessage(void* data) override;
 
+	virtual void draw(CDrawContext* pContext) override;
+
+
+	UTF8String str;
+
 protected:
     virtual ~CustomKnobView(void);
 
@@ -451,6 +456,41 @@ private:
     moodycamel::ReaderWriterQueue<CustomViewMessage, 32>* dataQueue = nullptr; ///< lock-free queue for incoming data, sized to 32 in length
 };
 
+
+class CustomKnobView2 : public CKnob, public ICustomView
+{
+public:
+	CustomKnobView2(const CRect& size, IControlListener* listener, int32_t tag);
+
+
+	/** ICustomView method: this repaints the control */
+	virtual void updateView() override;
+
+	/** ICustomView method: send a message to the object (!) */
+	virtual void sendMessage(void* data) override;
+
+	virtual void draw(CDrawContext* pContext) override;
+
+
+	UTF8String str;
+
+	
+
+protected:
+	virtual ~CustomKnobView2(void);
+
+private:
+
+	CRect oldsize;
+
+	SharedPointer<VSTGUI::CGraphicsPath> mrkpth = nullptr;
+
+
+	// --- lock-free queue for incoming data, sized to 32 in length
+	moodycamel::ReaderWriterQueue<CustomViewMessage, 32>* dataQueue = nullptr; ///< lock-free queue for incoming data, sized to 32 in length
+
+	CLASS_METHODS(CustomKnobView2, CKnob, CKnobBase)
+};
 
 /**
 \class KnobLinkController
