@@ -47,7 +47,8 @@ enum controlID {
 	dccutoff = 17,
 	feedback = 18,
 	fblowpass = 19,
-	fbhipass = 20
+	fbthresh = 20,
+	release = 21
 };
 
 
@@ -567,32 +568,60 @@ inline class zdf {
 		 ~zdf() {};
 
 		 void setfilter(double w2, double r) {
-			 w_2 = _mm_set1_ps(w2);
-			 _2k = _mm_set1_ps(r);
-			 denum = _mm_div_ps(UnityVectf, _mm_add_ps(_mm_add_ps(_mm_mul_ps(w_2, w_2), _mm_mul_ps(w_2, _2k)), UnityVectf));
-			 res = _mm_set1_ps(-(w2 + r));
+			 w_2f = _mm_set1_ps(w2);
+			 _2kf = _mm_set1_ps(r);
+			 denumf = _mm_div_ps(UnityVectf, _mm_add_ps(_mm_add_ps(_mm_mul_ps(w_2f, w_2f), _mm_mul_ps(w_2f, _2kf)), UnityVectf));
+			 resf = _mm_set1_ps(-(w2 + r));
+
+			w_2 = _mm_set1_pd(w2);
+			_2k = _mm_set1_pd(r);
+			denum = _mm_div_pd(UnityVect, _mm_add_pd(_mm_add_pd(_mm_mul_pd(w_2, w_2), _mm_mul_pd(w_2, _2k)), UnityVect));
+			res = _mm_set1_pd(-(w2 + r));
 		 }
 
-		 inline __m128 zdf2plp(__m128 inn ) {
+		 inline __m128 zdf2pLP(__m128 inn ) {
 			
-			 highf = _mm_mul_ps(_mm_add_ps(_mm_sub_ps(_mm_mul_ps(res, s1f), s2f), inn), denum);
-			 bandf = _mm_add_ps(_mm_mul_ps(w_2, highf), s1f);
-			 lowf = _mm_add_ps(_mm_mul_ps(w_2, bandf), s2f);
-			 s1f = _mm_add_ps(_mm_mul_ps(w_2, highf), bandf);
-			 s2f = _mm_add_ps(_mm_mul_ps(w_2, bandf), lowf);
+			 highf = _mm_mul_ps(_mm_add_ps(_mm_sub_ps(_mm_mul_ps(resf, s1f), s2f), inn), denumf);
+			 bandf = _mm_add_ps(_mm_mul_ps(w_2f, highf), s1f);
+			 lowf = _mm_add_ps(_mm_mul_ps(w_2f, bandf), s2f);
+			 s1f = _mm_add_ps(_mm_mul_ps(w_2f, highf), bandf);
+			 s2f = _mm_add_ps(_mm_mul_ps(w_2f, bandf), lowf);
 
 			 return lowf;
 		 }
 
-		 inline __m128 zdf2php(__m128 inn ) {
+		 inline __m128 zdf2pHP(__m128 inn ) {
 
-			 highf = _mm_mul_ps(_mm_add_ps(_mm_sub_ps(_mm_mul_ps(res, s1f), s2f), inn), denum);
-			 bandf = _mm_add_ps(_mm_mul_ps(w_2, highf), s1f);
-			 lowf = _mm_add_ps(_mm_mul_ps(w_2, bandf), s2f);
-			 s1f = _mm_add_ps(_mm_mul_ps(w_2, highf), bandf);
-			 s2f = _mm_add_ps(_mm_mul_ps(w_2, bandf), lowf);
+			 highf = _mm_mul_ps(_mm_add_ps(_mm_sub_ps(_mm_mul_ps(resf, s1f), s2f), inn), denumf);
+			 bandf = _mm_add_ps(_mm_mul_ps(w_2f, highf), s1f);
+			 lowf = _mm_add_ps(_mm_mul_ps(w_2f, bandf), s2f);
+			 s1f = _mm_add_ps(_mm_mul_ps(w_2f, highf), bandf);
+			 s2f = _mm_add_ps(_mm_mul_ps(w_2f, bandf), lowf);
 
 			 return highf;
+		 }
+
+
+		 inline __m128d zdf2pLPd(__m128d inn) {
+
+			 high = _mm_mul_pd(_mm_add_pd(_mm_sub_pd(_mm_mul_pd(res, s1), s2), inn), denum);
+			 band = _mm_add_pd(_mm_mul_pd(w_2, high), s1);
+			 low = _mm_add_pd(_mm_mul_pd(w_2, band), s2);
+			 s1 = _mm_add_pd(_mm_mul_pd(w_2, high), band);
+			 s2 = _mm_add_pd(_mm_mul_pd(w_2, band), low);
+
+			 return low;
+		 }
+
+		 inline __m128d zdf2pHPd(__m128d inn) {
+
+			 high = _mm_mul_pd(_mm_add_pd(_mm_sub_pd(_mm_mul_pd(res, s1), s2), inn), denum);
+			 band = _mm_add_pd(_mm_mul_pd(w_2, high), s1);
+			 low = _mm_add_pd(_mm_mul_pd(w_2, band), s2);
+			 s1 = _mm_add_pd(_mm_mul_pd(w_2, high), band);
+			 s2 = _mm_add_pd(_mm_mul_pd(w_2, band), low);
+
+			 return high;
 		 }
 
 	private:
@@ -601,13 +630,24 @@ inline class zdf {
 		 __m128 highf = _mm_set1_ps(0.00);
 		 __m128 bandf = _mm_set1_ps(0.000);
 		 __m128 lowf = _mm_set1_ps(0.0000);
-		 __m128 KVectf = _mm_set1_ps(1.414);
 		 __m128 UnityVectf = _mm_set1_ps(1.f);
 
-		 __m128 w_2 = _mm_set1_ps(.1);
-		 __m128 denum = _mm_set1_ps(.9);
-		 __m128 res = _mm_set1_ps(-1.);
-		 __m128 _2k = _mm_set1_ps(1.414);
+		 __m128 w_2f = _mm_set1_ps(.1);
+		 __m128 denumf = _mm_set1_ps(.9);
+		 __m128 resf = _mm_set1_ps(-1.);
+		 __m128 _2kf = _mm_set1_ps(1.414);
+
+		 __m128d s1 = _mm_set1_pd(0.003);
+		 __m128d s2 = _mm_set1_pd(0.00013);
+		 __m128d high = _mm_set1_pd(0.00);
+		 __m128d band = _mm_set1_pd(0.000);
+		 __m128d low = _mm_set1_pd(0.0000);
+
+		 __m128d w_2   = _mm_set1_pd(.1);
+		 __m128d denum = _mm_set1_pd(.9);
+		 __m128d res   = _mm_set1_pd(-1.);
+		 __m128d _2k   = _mm_set1_pd(1.414);
+		 __m128d UnityVect = _mm_set1_pd(1.);
 	 };
 
 
@@ -619,6 +659,7 @@ public:
 	//set frequency normalized
 	void set(double fc) {
 		_dccutf = _mm_set1_ps(fc);
+		_dccut = _mm_set1_pd(fc);
 	}
 
 	double process(double in) {
@@ -632,15 +673,20 @@ public:
 		return  _mm_sub_ps(_dcblockf, _dcstatef);
 	}
 
-	__m128d process(__m128d in) {
-
-		return in;
+	__m128d process_128d(__m128d in) {
+		_dcstate = _dcblock;
+		_dcblock = _mm_add_pd(in, _mm_mul_pd(_dcblock, _dccut));
+		return  _mm_sub_pd(_dcblock, _dcstate);
 	}
 
 private: protected:
 	__m128 _dcblockf = _mm_set1_ps(0.);
 	__m128 _dcstatef = _mm_set1_ps(0.);
 	__m128 _dccutf = _mm_set1_ps(0.1);
+
+	__m128d _dcblock = _mm_set1_pd(0.);
+	__m128d _dcstate = _mm_set1_pd(0.);
+	__m128d _dccut = _mm_set1_pd(0.1);
 	};
 
 	 zdf zdf_low;
@@ -682,6 +728,8 @@ private: protected:
 
 	__m128 _xoutput[32] = { _mm_set1_ps( 0.) };
 
+	DynamicsProcessor dyn[2];
+
 	double intp[4][2] = { 0 };
 
 	double x[8] = { 0. };
@@ -704,13 +752,15 @@ private: protected:
 	__m128 _threshold = _mm_set1_ps(1);
 	double threshold_p = 0;
 
+	__m128 _diodeout = _mm_set1_ps(0.);
 
 	double inputgain_p = 0.;
 	double outputgain_p = 0.;
 
 	double feedback_p = 0;
 	double feedbacklow_p = 8000.;
-	double feedbackhi_p = 10;
+	double fbthresh_p = -12;
+	double release_p = -12;
 
 	double sdiode = 0;
 
@@ -728,8 +778,8 @@ private: protected:
 	double thermalvoltage_p = 0.026;
 	double satcurrent_p = 0.00000000252;
 
-	double assym_p = 0.66;
-	double assym_sm = 0.66;
+	double assym_p = 0.0;
+	double assym_sm = 0.0;
 
 	double ampgain_p = 1.;
 	double ampVt_p = 0.023;
