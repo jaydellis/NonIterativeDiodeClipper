@@ -2135,6 +2135,8 @@ protected:
 	// --- storage for sidechain audio input (mono only)
 	double sidechainInputSample = 0.0; ///< storage for sidechain sample
 
+		//just edited this to be public for now. TODO
+public:
 	/** compute (and save) the current gain value based on detected input (dB) */
 	inline double computeGain(double detect_dB)
 	{
@@ -2210,7 +2212,7 @@ protected:
 				//	output_dB = ((parameters.ratio - 1.0) * pow((detect_dB - parameters.threshold_dB - (parameters.kneeWidth_dB / 2.0)), 2.0)) / (2.0*parameters.kneeWidth_dB);
 		//	
 // this version works - but has an inverted output compared to the hard knee version 
-				///- maybe should rewrite both to this form since they seem flipped at the gain computation output anyways
+				///- maybe should rewrite both to this form since they seem flipped at the gain computation output
 			//	output_dB = detect_dB + (1. / (parameters.ratio - 1.0) * pow((detect_dB - parameters.threshold_dB - (parameters.kneeWidth_dB / 2.0)), 2.0)) / (2.0*parameters.kneeWidth_dB);
 				
 	//  think it's actually intended to look like this !!!

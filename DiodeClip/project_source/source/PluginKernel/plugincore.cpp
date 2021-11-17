@@ -225,7 +225,6 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 
 // todo 	//tune resistor via fc = 1/(2*pi*RC)
 	Is = satcurrent_p * 0.000000000001;   // sat curr
-	vt = thermalvoltage_p * 0.001;     //th volt
 	C = capacitor_p * 0.000000001;      //cap
 
 
@@ -438,46 +437,24 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 	RCH::Undenormal noDenormals;
 
 	//dcfilter not quick enough 
-	dctimer = FastMin(dctimer + 0.005, 1.);
+	dctimer = FastMin(dctimer + 0.01, 1.);
 
 	zdf_low.setfilter(feedbacklow_p* kPi*oversampsampinv* invSR, 1.4);		// 1/2R this must be most unresonant
 //	zdf_high.setfilter(feedbackhi_p* kPi*oversampsampinv* invSR, 2);
 	
+	float sagtime = 1. / (release_p * .001);
 
-	DiodePair.setDiodePair(resistor_p, C, Is, vt, getSampleRate() * oversampling_p);
-
-	doubleDiodePair[0].setDiodePair(resistor_p, C, Is, vt, getSampleRate() * oversampling_p);
-	doubleDiodePair[1].setDiodePair(resistor_p, C, Is, vt, getSampleRate() * oversampling_p);
-
-	const float wk1 = 1.0 / (C * resistor_p);
-	const float wB0 = 2. * getSampleRate()*oversampling_p;
-
-	const float wk2 = (C * resistor_p ) / (wB0 * C * resistor_p + 1.0);
-	const float wk3 = (Is * resistor_p ) / (wB0 * C * resistor_p + 1.0);
-	const float wk5 = log((Is * resistor_p) / ((wB0 * C * resistor_p + 1.0) * vt));
-
-	const float wk5a = log((Is * resistor_p) / ((wB0 * C * resistor_p + 1.0) * .25 *vt));
-
-	const float wk6 = -wB0 - wB0;
+	twopolelowp.setfilter( sagtime  * kPi * invSR, 1.4);
 
 
-	const double ebersVT = .001 * ampVt_p;  //   0.0026  threshold point //blows up below 0.00002V
-	const double ebersIs = 1e-16; //   1e-16;  //weakly couple with Vt - best kept low
-	const double ebersBf = 100.;					// not interesting //try mV
-	const double ebersRe = 1000.; // 1e3;     //negligble effect
-	const double ebersVplus = 1.;	//  Voltage
+//	float vtmakeup = 1./(0.0188039288 + 32.958596608*vt - 17.482802146*vt*vt);
 
-	const double ebersInvVT = 1.0 / ebersVT;
-	const double ebersk1 = ebersIs * ebersRe;
-	const double ebersk2 = 1.0 / ebersBf;
-	const double ebersk = log(ebersInvVT * ebersk1 * (1.0 + ebersk2));
-
-
+	
 	ClassA.setBJT_128(ampVt_p);
 	ClassB.setBJT_128(ampVt_p);
 
-
 	__m128 _upsmp[32] = { _zerod };
+
 
 		//// Grid saturation from http://willpirkle.com/special/Addendum_A19_Pirkle_v1.0.pdf
 
@@ -487,11 +464,11 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 //	const __m128 _prka = _mm_set1_ps((-0.3241584);
 //	const __m128 _prkb = _mm_set1_ps(.4473253);		// from p94 
-//	const __m128 _prkc = _mm_set1_ps(0.5451584);	//small error of ~ -42.48 dB
+//	const __m128 _prkc = _mm_set1_ps(0.5451584);	// very small error of ~ -42.48 dB
 
 //	const __m128 _prka = _mm_set1_ps(-0.3241584);
-//	const __m128 _prkb = _mm_set1_ps(0.447);			//from page 62
-//	const __m128 _prkc = _mm_set1_ps(0.545);		// small error of ~ −41.9 dB
+//	const __m128 _prkb = _mm_set1_ps(0.447);		//from page 62
+//	const __m128 _prkc = _mm_set1_ps(0.545);		// very small error of ~ −41.9 dB
 
 
 	// --- block processing -- write to outputs
@@ -500,20 +477,41 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		sample++, i++)
 	{
 
+		//vt
+		vt = thermalvoltage_p * 0.001;    
+
+		float vtmakeup = 1. / (-0.000451063384466717 + 0.04847815336514556 * thermalvoltage_p * sagVtf.m128_f32[0]);
+		float currentmakeup = 1 / (1.159148907293 * powf(satcurrent_p, -0.04811517431058769434));
+
+		vtmakeup = vtmakeup * currentmakeup;
+
+		DiodePair.setDiodePair(resistor_p + sagLPf * 1000, C, Is, vt *sagVtf.m128_f32[0] , getSampleRate() * oversampling_p);
+
 		double meterinl = blockInfo.inputs[0][sample];
-			double meterinr = blockInfo.inputs[1][sample];
+		double meterinr = blockInfo.inputs[1][sample];
+
+		float sagfct[4] = { 0. };
+		_mm_store_ps(sagfct, sagfactor);
+
+		sagfct[0] = powf(10.f, sagfct[0] * .05f);
+
+		expandL = 1. / dyn[0].computeGain(sagfct[0]);
+		expandR = 1. / dyn[1].computeGain(sagfct[0]);
+
+		sagLPf = expandL * sagLP_p;
+		sagInput = sagInf.m128_f32[0];
 
 		//	if (sse_p == 1)
 			{
-				ingainsm = ingainsm * .999 + 0.001 * ingainfactor;
-				outgainsm = outgainsm * .999 + 0.001 * outgainfactor;
+			ingainsm = ingainsm * .999 + 0.001 * ingainfactor  ;
+				outgainsm = outgainsm * .999 + 0.001 * outgainfactor ;
 				ampgainsm = ampgainsm * .999 + 0.001 * ampgainfactor;
 				dccutsm = dccutsm * .999 + 0.001 * dccutOS;
 
 				assym_sm = assym_sm * .999 + 0.001 * (assym_p) * dctimer;
 
 				const __m128 assym_d = _mm_set1_ps(assym_sm);
-				const __m128 _ingainsm = _mm_set1_ps(ingainsm * oversampling_p);
+				const __m128 _ingainsm = _mm_set1_ps(ingainsm * oversampling_p * sagInput *1. / vtmakeup);
 				const __m128 _ampgainsm = _mm_set1_ps(ampgainsm);
 				const __m128 _dccutOS = _mm_set1_ps(dccutsm);
 
@@ -525,13 +523,15 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 													(blockInfo.inputs[1][sample]) * 0 };
 
 		//compute feedback expansion level
-				dyn[0].processAudioSample(xoutput[0]);
-				dyn[1].processAudioSample(xoutput[1]);
-				double expandL = 1/dyn[0].getParameters().gainReduction;
-				double expandR = 1/dyn[1].getParameters().gainReduction;
+
+		//		dyn[0].processAudioSample(xoutput[0]);
+		//		dyn[1].processAudioSample(xoutput[1]);
+		//			expandL = 1/dyn[0].getParameters().gainReduction;
+		//			expandR = 1/dyn[1].getParameters().gainReduction;
+
 
 		//Feedback expansion 
-				const __m128 _feedback = _mm_set_ps(0,0, feedback_p*expandR, feedback_p*expandL); // whcky sse
+				const __m128 _feedback = _mm_set_ps(0,0, feedback_p*expandR, feedback_p*expandL); // bckwrds sse
 
 		//Input Gain
 			_upsmp[0] = _mm_mul_ps( _mm_load_ps(inp) , _ingainsm); 
@@ -556,7 +556,8 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 					_dcout = _mm_cvtpd_ps(_xind);
 
 				}  
-				else {		//// both need double precision
+				else {		//// both need double precision  
+							// 
 
 					__m128d _xind = _mm_cvtps_pd(_xin);
 					_xind = ClassA.processBJT_128d(_xind);
@@ -564,39 +565,71 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 					_xind = DCblk.process_128d(_xind);
 
 					_dcout = _mm_cvtpd_ps(_xind);
-
 				}
 
-
+		//		__m256d _xin_avx = _mm256_cvtps_pd(_dcout);
+		//		_dcout = _mm256_cvtpd_ps(_xin_avx);
 		//gain
+			//	_dcout = _xinfll[i];
 			_dcout = _mm_mul_ps(_dcout, _ampgainsm);
 
 		// Grid-Conduction stage
 			const __m128 thrshmask = _mm_mul_ps( _prka, _mm_max_ps(_zerod, _mm_sub_ps(_dcout, _threshold)) );			
 			const __m128 compressionfactor = _mm_add_ps( _prkb, _mm_mul_ps( _prkc, rexpf( thrshmask))) ;
 
-				_dcout = _mm_mul_ps( _dcout ,  compressionfactor  );
+				_gridout = _mm_mul_ps( _dcout ,  compressionfactor  );
 
 
 		// -feedback lowpass
-				__m128	degen = zdf_low.zdf2pLP(_diodeout);
+				degen = zdf_low.zdf2pLP(_diodeout);
 		//expansion
-				degen = _mm_mul_ps(degen, _feedback);
-				_dcout = _mm_sub_ps(_dcout, degen);
+				_sumout = _mm_sub_ps(_gridout, _mm_mul_ps(degen, _feedback));
 
 
 		//Combined SSE Class B Stage
-				_dcout = ClassB.processClassBCombined_128( _overbias, _dcout);
+				if (sse_p == 0) {
+					_sumout = ClassB.processClassBCombined_128(_overbias, _sumout);
+				}
+				else {
+					_sumout = _mm_cvtpd_ps( ClassB.processClassBCombined_128d(_mm_cvtps_pd(_overbias), _mm_cvtps_pd(_sumout)) );
+				}
 
 			//Diodes
-			_diodeout = DiodePair.processDiodePair_128(_dcout);
+				if (sse_p == 0) {
+					_diodeout = DiodePair.processDiodePair_128(_sumout);
+				}
+				else {
+				//	_diodeout = _mm_cvtpd_ps(DiodePair.processDucesshiDiodePair_128d(_mm_cvtps_pd(_sumout)));
+
+					_diodeout = _mm_cvtpd_ps( DiodePair.processDiodePair_128d(_mm_cvtps_pd( _sumout )) );
+
+				}
 		
 			//Downsampling filter
 				_xoutput[i] = dwnn[0].processSSEf( _diodeout);
 			}
 
-			_mm_store_ps(xoutput, _xoutput[0]);
+			_xoutput[0] = _mm_mul_ps(_xoutput[0], _mm_set1_ps(vtmakeup ));
 
+			//sag follower filter ~13.5 Hz slightly resonant after Kuehnel
+			sagfactor = twopolelowp.zdf2pLP( _mm_and_ps(_xoutput[0], absmask) );
+
+			//appy expansion
+		__m128 expsagfactor = _mm_mul_ps( sagfactor, _mm_set1_ps(expandL));
+
+			//sag shaping after Kuehnel// 
+
+			sagVtf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps(expsagfactor, _mm_set1_ps(sagVt_p))) );
+
+			sagVolf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps(expsagfactor, _mm_set1_ps(sagVol_p))));
+
+			sagInf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps(expsagfactor, _mm_set1_ps(sagintrim_p))));
+
+			_xoutput[0] = _mm_mul_ps(_xoutput[0], _mm_set1_ps(outgainsm));
+
+			_xoutput[0] = _mm_mul_ps(_xoutput[0], sagVolf);
+
+			_mm_store_ps(xoutput, _xoutput[0]);
 
 			switch (hipass_p) {
 			case 0: {
@@ -622,34 +655,35 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			default:  break;
 			}
 
-			blockInfo.outputs[0][sample] = (xout)  * outgainsm ;
-			blockInfo.outputs[1][sample] = (xoutR) * outgainsm;
+			blockInfo.outputs[0][sample] = (xout)   ;
+			blockInfo.outputs[1][sample] = (xoutR)  ;
 	} 
 
 
 		//meters
 		{
-			envinmi     = ( FastAbs( meterinl  * ingainsm * ampgainsm)) - zmiL;  //meter in
+			envinmi     = ( FastAbs( meterinl  * ingainsm )) - zmiL;  //meter in
 			envpolmi    = ((envinmi > 0.0)) + ((envinmi < 0.0) * relmi);
 			zmiL = zmiL + (envinmi * envpolmi);
 
-			envinmiR    = ( FastAbs( meterinr * ingainsm * ampgainsm)) - zmiR;			// 1 was gainsm
+			envinmiR    = ( FastAbs( meterinr * ingainsm )) - zmiR;			// 1 was gainsm
 			envpolmiR   = ((envinmiR > 0.0)) + ((envinmiR < 0.0) * relmi);
 			zmiR = zmiR + (envinmiR * envpolmiR);
 
-			envinmi2L  = ( FastAbs( xout) * outgainsm) - zmi2L;
+			envinmi2L  = ( FastAbs( xout) ) - zmi2L;
 			envpolmi2L = ((envinmi2L > 0.0)) + ((envinmi2L < 0.0) * relmi);
 			zmi2L = zmi2L + (envinmi2L * envpolmi2L);   //.00049
 
-			envinmi2R  = ( FastAbs( xoutR ) * outgainsm) - zmi2R;
+			envinmi2R  = ( FastAbs( xoutR ) ) - zmi2R;
 			envpolmi2R = ((envinmi2R > 0.0)) + ((envinmi2R < 0.0) * relmi);
 			zmi2R = zmi2R + (envinmi2R * envpolmi2R);   //.00049				//meter out
 
-			rmsil = rmsil * rmse + (1. - rmse) * ((meterinl *  ingainsm*ampgainsm) * ( meterinl *  ingainsm) );			//rms l	
-			rmsir = rmsir * rmse + (1. - rmse) * ((meterinr *  ingainsm*ampgainsm) * (meterinr * ingainsm ) );			//rms r
+			rmsil = rmsil * rmse + (1. - rmse) * ((meterinl *  ingainsm ) * ( meterinl *  ingainsm) );			//rms l	
+			rmsir = rmsir * rmse + (1. - rmse) * ((meterinr *  ingainsm ) * (meterinr * ingainsm ) );			//rms r
 
-			rmsol = rmsol * rmse + (1. - rmse) * ((xout* outgainsm)  * (xout  * outgainsm));		//rms lout
-			rmsor = rmsor * rmse + (1. - rmse) * ((xoutR* outgainsm) * (xoutR * outgainsm));		//rms rout
+			rmsol = rmsol * rmse + (1. - rmse) * ((xout )  * (xout  ));		//rms lout
+			rmsor = rmsor * rmse + (1. - rmse) * ((xoutR ) * (xoutR ));		//rms rout
+
 		}
 
 	//	if (isCustomViewDataQueueEnabled()) {	customViewDataQueue.enqueue(viewoutput);	}
@@ -829,31 +863,114 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 	// --- update view; this will only be called if the GUI is actually open
 	case PLUGINGUI_TIMERPING:
 	{
+		VSTGUI::CustomViewMessage knobMessage;
+		knobMessage.message = VSTGUI::MESSAGE_QUERY_CONTROL;
+		std::string valstrng;
+		const char* y;
 
-		if (knobView) {
-			// --- send the view a message
-			VSTGUI::CustomViewMessage knobMessage;
-			knobMessage.message = VSTGUI::MESSAGE_QUERY_CONTROL;
-			std::string s;
-			s = std::to_string(resistor_p);
-			auto y = s.c_str();
+		//fb thresh
+		if (dynknob[0]) {
+			valstrng = std::to_string(expandL);
+			y = valstrng.c_str();
 			knobMessage.queryString.assign(y);
 
 			// --- send the message
-			knobView->sendMessage(&knobMessage);
-			knobView->updateView();
+			dynknob[0]->sendMessage(&knobMessage);
+			dynknob[0]->updateView();
+		}
+
+		//fb
+		if (dynknob[1]) {
+
+			float vval = FastMin(1., FastMax(-1., (FastAbs(degen.m128_f32[0])*feedback_p*expandL)));
+					vval = FastMax(-0.f, FastMin(48.f, (20.f* log10f( vval ) + 12.f))) / 24.f;
+
+			valstrng = std::to_string( FastMin(1., FastMax(-1.,(1.41f*(FastAbs(degen.m128_f32[0]))*feedback_p*expandL)) ) );
+			y = valstrng.c_str();
+			knobMessage.queryString.assign(y);
+
+			dynknob[1]->sendMessage(&knobMessage);
+			dynknob[1]->updateView();
+		}
+
+		//invol
+		if (dynknob[2]) {
+
+		//	float vval = FastMax(-0.f,FastMin(48.f ,(20.f* log10f( zmiL / ampgainsm) +24.f) ) )/48.f;
+
+			float vval = FastMax(-0.,FastMin(48. ,(20.* log10f( ingainsm * sagInput) +24.) ) )/48.;
+
+			valstrng = std::to_string( vval );
+			y = valstrng.c_str();
+			knobMessage.queryString.assign(y);
+
+			dynknob[2]->sendMessage(&knobMessage);
+			dynknob[2]->updateView();
+		}
+
+		//midstage gain
+		if (dynknob[3]) {
+
+			float vval = FastMax(-0.f, FastMin(36.f, (20.f* log10f( zmiL * ampgainsm ) + 12.f))) / 36.f;
+
+			valstrng = std::to_string( vval );
+			y = valstrng.c_str();
+			knobMessage.queryString.assign(y);
+
+			dynknob[3]->sendMessage(&knobMessage);
+			dynknob[3]->updateView();
+		}
+
+		//output gain
+		if (dynknob[4]) {
+
+			float vval = FastMax(-0.f, FastMin(48.f, (20.f* log10f(outgainsm * sagVolf.m128_f32[0]) + 24.f))) / 48.f;
+
+			valstrng = std::to_string( vval );
+			y = valstrng.c_str();
+			knobMessage.queryString.assign(y);
+
+			dynknob[4]->sendMessage(&knobMessage);
+			dynknob[4]->updateView();
+		}
+
+		//vt
+		if (dynknob[5]) {
+
+			//from customparamameters antilog scaling// thanks Will
+			float vall = (kCTCorrFactorAntiUnity)*(-pow(10.0, ( -(vt * 1000. * sagVtf.m128_f32[0]) / (200.f) / kCTCoefficient)) + 1.0);
+
+			valstrng = std::to_string(  vall );
+			y = valstrng.c_str();
+			knobMessage.queryString.assign(y);
+
+			dynknob[5]->sendMessage(&knobMessage);
+			dynknob[5]->updateView();
+		}
+
+		//res
+		if (dynknob[6]) {
+
+			float vall = 1. - (kCTCorrFactorAntiUnity)*(-pow(10.0, (-(resistor_p + sagLPf * 1000) / (60000.f) / kCTCoefficient)) + 1.0);
+
+			valstrng = std::to_string(vall);
+			y = valstrng.c_str();
+			knobMessage.queryString.assign(y);
+
+			dynknob[6]->sendMessage(&knobMessage);
+			dynknob[6]->updateView();
 		}
 
 		if (isCustomViewDataQueueEnabled()) {
 
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 2. + (-20.f* log10f(FastMin(zmiL *.0625, 0.999)))*.001;
+			viewoutput = 2. + (-20.* log10f(FastMin(zmiL *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 4. + (-20.f* log10f(FastMin(zmiR *.0625, 0.999)))*.001;
+			viewoutput = 4. + (-20.* log10f(FastMin(zmiR *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 10. + (-20.f* log10f(FastMin(zmi2L *.0625, 0.999)))*.001;
+			viewoutput = 10. + (-20.* log10f(FastMin(zmi2L *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
-			viewoutput = 12. + (-20.f* log10f(FastMin(zmi2R *.0625, 0.999)))*.001;
+			viewoutput = 12. + (-20.* log10f(FastMin(zmi2R *.0625, 0.999)))*.001;
 			customViewDataQueue.enqueue(viewoutput);
 
 			viewoutput = 6. + (-20.* log10(FastMin(sqrt(rmsil) *.0625, 0.999)))*.001;
@@ -937,34 +1054,83 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 			// --- registered!
 			return true;
 		}
-
-		if (messageInfo.inMessageString.compare("CustomKnobView2") == 0)
+		
+		if (messageInfo.inMessageString.compare("DynamicKnobView") == 0)		//threshold
 		{
 			// --- (1) get the custom view interface via incoming message data*
-			if (knobView2 != static_cast<ICustomView*>(messageInfo.inMessageData))
-				knobView2 = static_cast<ICustomView*>(messageInfo.inMessageData);
+			if (dynknob[0] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[0] = static_cast<ICustomView*>(messageInfo.inMessageData);
 
-			if (!knobView2) return false;
-
-
-			// --- send the view a message
-			VSTGUI::CustomViewMessage knobMessage;
-			knobMessage.message = VSTGUI::MESSAGE_QUERY_CONTROL;
-			knobMessage.queryString.assign("Hello There!");
-
-			// --- send the message
-			knobView2->sendMessage(&knobMessage);
-
-			// --- check the reply string; the messgageData variable contains a pointer to the object (DANGEROUS)
-			const char* reply = knobMessage.replyString.c_str();
-			printf("%s", reply);
-
-			VSTGUI::CKnob* customKnob = static_cast<VSTGUI::CKnob*>(knobMessage.messageData);
-			
+			if (!dynknob[0]) return false;
 			// --- registered!
 			return true;
 		}
 
+		if (messageInfo.inMessageString.compare("DKV2") == 0) ////feedback
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (dynknob[1] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[1] = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!dynknob[1]) return false;
+			// --- registered!
+			return true;
+		}
+
+		if (messageInfo.inMessageString.compare("DKVingain") == 0) ////ingain
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (dynknob[2] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[2] = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!dynknob[2]) return false;
+			// --- registered!
+			return true;
+		}
+
+		if (messageInfo.inMessageString.compare("DKVgain") == 0) ////gain
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (dynknob[3] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[3] = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!dynknob[3]) return false;
+			// --- registered!
+			return true;
+		}
+
+		if (messageInfo.inMessageString.compare("DKVoutgain") == 0) ////
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (dynknob[4] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[4] = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!dynknob[4]) return false;
+			// --- registered!
+			return true;
+		}
+
+		if (messageInfo.inMessageString.compare("DKVgrid") == 0) ////VT
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (dynknob[5] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[5] = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!dynknob[5]) return false;
+			// --- registered!
+			return true;
+		}
+
+		if (messageInfo.inMessageString.compare("DKVlpf") == 0) ////res
+		{
+			// --- (1) get the custom view interface via incoming message data*
+			if (dynknob[6] != static_cast<ICustomView*>(messageInfo.inMessageData))
+				dynknob[6] = static_cast<ICustomView*>(messageInfo.inMessageData);
+
+			if (!dynknob[6]) return false;
+			// --- registered!
+			return true;
+		}
 
 		// --- example of querying plugin for information and getting a pointer to the control
 		   //     which is VERY risky - you should use the custom view data structure and messaging
@@ -1096,11 +1262,11 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&capacitor_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::satcurrent, "current", "pA", controlVariableType::kDouble, .00252, 250., 25, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::satcurrent, "current", "pA", controlVariableType::kDouble, .00252, 2000., 25, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&satcurrent_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 15, 110, 33, taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::thermalvoltage, "thermalvoltage", "mV", controlVariableType::kDouble, 1, 200, 33, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&thermalvoltage_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1152,7 +1318,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&feedback_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::fblowpass, "fbacklowpass", "Hz", controlVariableType::kDouble, 1, 20000., 5., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::fblowpass, "fbacklowpass", "Hz", controlVariableType::kDouble, 10, 10000., 50., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&feedbacklow_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1162,6 +1328,22 @@ bool PluginCore::initPluginParameters()
 
 	piParam = new PluginParameter(controlID::release, "release", "ms", controlVariableType::kDouble, 1., 500., 200., taper::kLinearTaper);
 	piParam->setBoundVariable(&release_p, boundVariableType::kDouble);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::sagVol, "sagvol", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam->setBoundVariable(&sagVol_p, boundVariableType::kFloat);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::sagVt, "sagvt", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam->setBoundVariable(&sagVt_p, boundVariableType::kFloat);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::sagLP, "saglp", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam->setBoundVariable(&sagLP_p, boundVariableType::kFloat);
+	addPluginParameter(piParam);
+
+	piParam = new PluginParameter(controlID::sagIntrim, "sag_in", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam->setBoundVariable(&sagintrim_p, boundVariableType::kFloat);
 	addPluginParameter(piParam);
 
 	// **--0xEDA5--**

@@ -472,25 +472,114 @@ public:
 	virtual void draw(CDrawContext* pContext) override;
 
 
-	UTF8String str;
-
-	
-
 protected:
 	virtual ~CustomKnobView2(void);
 
 private:
 
+	UTF8String str;
+
 	CRect oldsize;
 
 	SharedPointer<VSTGUI::CGraphicsPath> mrkpth = nullptr;
-
 
 	// --- lock-free queue for incoming data, sized to 32 in length
 	moodycamel::ReaderWriterQueue<CustomViewMessage, 32>* dataQueue = nullptr; ///< lock-free queue for incoming data, sized to 32 in length
 
 	CLASS_METHODS(CustomKnobView2, CKnob, CKnobBase)
 };
+
+
+
+class drawDynamicRing {
+public:
+	drawDynamicRing() {};
+	~drawDynamicRing() {};
+
+	void drawDynRing(CDrawContext* pContext, UTF8String str, int drawStyle, CRect size) {
+
+		strngv = strtof(str, NULL);
+		drawstyle = drawStyle;
+		dynrect = size;
+		pcontext = pContext;
+
+		cntr = 0;
+		if (drawstyle & 4) {   ////kCoronaFromCenter = 4
+			cntr += 135;
+			strngv *= .5 * strngv;
+		}
+
+		// gui rate smoother 1 frame = ~30ms
+			//	smoothval = .9 * smoothval + .1 * s;
+			//	s = smoothval;
+
+		int clockwise = 1 - signbit(strngv);
+		auto path = owned(pContext->createGraphicsPath());
+
+		dynrect.inset(6, 6);
+		path->addArc(dynrect, -225 + cntr, -225 + cntr + 270 * strngv, clockwise);
+
+		CColor dyncol(255, 0, 100, 100);
+		pContext->setFrameColor(dyncol);
+		pContext->drawGraphicsPath(path, CDrawContext::kPathStroked);
+
+	}
+
+	void updateDynRng(UTF8String str) {
+
+		strngv = strtof(str, NULL);
+
+		int clockwise = 1 - signbit(strngv);
+		auto path = owned(pcontext->createGraphicsPath());
+
+		dynrect.inset(6, 6);
+		path->addArc(dynrect, -225 + cntr, -225 + cntr + 270 * strngv, clockwise);
+
+		CColor dyncol(255, 0, 100, 100);
+		pcontext->setFrameColor(dyncol);
+		pcontext->drawGraphicsPath(path, CDrawContext::kPathStroked);
+
+	}
+
+private:
+	float strngv = 0;
+	int cntr = 0;
+	int drawstyle = 0;
+	CRect dynrect;
+	CDrawContext* pcontext;
+};
+
+
+class DynamicKnobView : public CKnob, public ICustomView
+{
+public:
+	DynamicKnobView(const CRect& size, IControlListener* listener, int32_t tag);
+
+	/** ICustomView method: this repaints the control */
+	virtual void updateView() override;
+	/** ICustomView method: send a message to the object (!) */
+	virtual void sendMessage(void* data) override;
+	virtual void draw(CDrawContext* pContext) override;
+
+	UTF8String str;
+
+
+protected:
+	virtual ~DynamicKnobView(void);
+
+private:
+
+	SharedPointer<VSTGUI::CGraphicsPath> mrkpth = nullptr;
+	float smoothval = 0;
+
+	drawDynamicRing DynRng;
+
+	// --- lock-free queue for incoming data, sized to 2 in length
+	moodycamel::ReaderWriterQueue<CustomViewMessage, 2>* dataQueue = nullptr; ///< lock-free queue for incoming data, sized to 32 in length
+
+	CLASS_METHODS(DynamicKnobView, CKnob, CKnobBase)
+};
+
 
 /**
 \class KnobLinkController

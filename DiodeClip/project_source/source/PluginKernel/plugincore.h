@@ -48,7 +48,11 @@ enum controlID {
 	feedback = 18,
 	fblowpass = 19,
 	fbthresh = 20,
-	release = 21
+	release = 21,
+	sagVol = 22,
+	sagVt = 23,
+	sagLP = 24,
+	sagIntrim = 25
 };
 
 
@@ -692,6 +696,21 @@ private: protected:
 	 zdf zdf_low;
 	 zdf zdf_high;
 
+	 zdf twopolelowp;
+	 __m128 sagfactor = _unityf;
+	 float sag_p = 0;
+
+	 float sagVol_p = 0.01;
+	 float sagVt_p = 0.01;
+	 float sagLP_p = 0.01;
+	 float sagintrim_p = 0.01;
+	__m128 sagVolf = _mm_set1_ps(1.);
+	__m128 sagVtf  = _mm_set1_ps(1.);
+	__m128 sagInf = _mm_set1_ps(1.);
+
+	float sagInput = 0.;
+	 float sagLPf = 0;
+
 	cascadedbiq upss[2];
 	cascadedbiq dwnn[2];
 
@@ -730,6 +749,9 @@ private: protected:
 
 	DynamicsProcessor dyn[2];
 
+	double expandL = 1.;
+	double expandR = 1.;
+
 	double intp[4][2] = { 0 };
 
 	double x[8] = { 0. };
@@ -747,6 +769,9 @@ private: protected:
 	__m128 _dcblock = _mm_set1_ps(0.);
 	__m128 _dcstate = _mm_set1_ps(0.);
 	__m128 _dcout = _mm_set1_ps(0.);
+	__m128	degen = _mm_set1_ps(0.);
+	__m128 _gridout = _mm_set1_ps(0.);
+	__m128 _sumout = _mm_set1_ps(0.);
 
 	double dthreshold = 1.;
 	__m128 _threshold = _mm_set1_ps(1);
@@ -911,6 +936,9 @@ private: protected:
 	double envinmi2L, envinmi2R = 0.1;
 	double envpolmi2L, envpolmi2R = 0.1;
 
+
+
+
 	double rmsil = 0.01;
 	double rmsir = 0.01;
 	double rmsol = 0.01;
@@ -927,6 +955,8 @@ private: protected:
 
 	ICustomView* knobView = nullptr;
 	ICustomView* knobView2 = nullptr;
+
+	ICustomView* dynknob[8] = { nullptr };
 
 	ICustomView* SpectrumView2 = nullptr;
 	moodycamel::ReaderWriterQueue<float, 16> customViewDataQueue;

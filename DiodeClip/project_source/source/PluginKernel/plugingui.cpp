@@ -1840,6 +1840,48 @@ CView* PluginGUI::createUserCustomView(std::string viewname, const CRect rect, I
 		return new CustomKnobView2(rect, listener, tag);
 	}
 
+	if (viewname.compare("DynamicKnobView") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
+	if (viewname.compare("DKV2") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
+	if (viewname.compare("DKVingain") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
+	if (viewname.compare("DKVgain") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
+	if (viewname.compare("DKVoutgain") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
+	if (viewname.compare("DKVgrid") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
+	if (viewname.compare("DKVlpf") == 0)
+	{
+		// --- create our custom view
+		return new DynamicKnobView(rect, listener, tag);
+	}
+
 	return nullptr;
 }
 
@@ -1988,6 +2030,7 @@ CView* PluginGUI::createView(const UIAttributes& attributes, const IUIDescriptio
         return customKnob;
     }
 
+	
 	if (viewname == "CustomKnobView2")
 	{
 		// --- our wave view testing object
@@ -2060,6 +2103,49 @@ CView* PluginGUI::createView(const UIAttributes& attributes, const IUIDescriptio
 
 		return customKnob;
 	}
+
+
+	if (viewname == "DynamicKnobView" || viewname == "DKVingain" || viewname == "DKVoutgain" || viewname == "DKVgrid" || viewname == "DKVlpf")
+	{
+		const std::string* tagString = attributes.getAttributeValue("control-tag");
+		if (!tagString) return nullptr;
+
+		IControlListener* listener = description->getControlListener(tagString->c_str());
+		int32_t tag = description->getTagForName(tagString->c_str());
+		CRect rect;
+
+		DynamicKnobView* customKnob = new DynamicKnobView(rect, listener, tag);
+
+		if (hasICustomView(customKnob))
+		{
+			if (guiPluginConnector)
+				guiPluginConnector->registerCustomView(viewname, (ICustomView*)customKnob);
+		}
+
+		return customKnob;
+	}
+
+	if (viewname == "DKV2")
+	{
+		const std::string* tagString = attributes.getAttributeValue("control-tag");
+		if (!tagString) return nullptr;
+
+		IControlListener* listener = description->getControlListener(tagString->c_str());
+		int32_t tag = description->getTagForName(tagString->c_str());
+		CRect rect;
+
+		DynamicKnobView* customKnob = new DynamicKnobView(rect, listener, tag);
+
+		if (hasICustomView(customKnob))
+		{
+			if (guiPluginConnector)
+				guiPluginConnector->registerCustomView(viewname, (ICustomView*)customKnob);
+		}
+
+		return customKnob;
+	}
+
+
 
 
     // --- BUILT-IN CUSTOM VIEWS
