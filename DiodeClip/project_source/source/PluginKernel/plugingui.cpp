@@ -438,36 +438,41 @@ void PluginGUI::scaleGUISize(uint32_t controlValue)
 	float scalePercent = 100.f;
 	switch (controlValue)
 	{
-	case tinyGUI:
+	case tiny:
 	{
 		scalePercent = 65.f;
 		break;
 	}
-	case verySmallGUI:
+	case verySmall:
 	{
 		scalePercent = 75.f;
 		break;
 	}
-	case smallGUI:
+	case small:
 	{
 		scalePercent = 85.f;
 		break;
 	}
-	case normalGUI:
+	case normal:
 	{
 		scalePercent = 100.f;
 		break;
 	}
-	case largeGUI:
+	case large:
 	{
 		scalePercent = 125.f;
 		break;
 	}
-	case veryLargeGUI:
+	case veryLarge:
 	{
 		scalePercent = 150.f;
 		break;
 	}
+	}
+
+	if (scaleflag) {
+		scalePercent = 100.;
+		scaleflag = false;
 	}
 
 	double width = guiWidth;

@@ -35,7 +35,7 @@ const unsigned int SCALE_GUI_SIZE = 131077;		///<RESERVED PARAMETER ID VALUE
 const unsigned int CUSTOM_VIEW_BASE = 132000;	///<ID values for Custom Views (not necessarily required)
 
 // --- enum for the GUI object's message processing
-enum { tinyGUI, verySmallGUI, smallGUI, normalGUI, largeGUI, veryLargeGUI };	///< GUI scaling constants
+enum { tiny, verySmall, small, normal, large, veryLarge };	///< GUI scaling constants ///changed from tinyGUI BUGFIX TODO
 
 /**
 @isReservedTag

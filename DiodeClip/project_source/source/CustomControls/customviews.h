@@ -457,17 +457,17 @@ private:
 };
 
 
-class CustomKnobView2 : public CKnob, public ICustomView
+class CustomKnobView2 : public CKnob //, public ICustomView
 {
 public:
 	CustomKnobView2(const CRect& size, IControlListener* listener, int32_t tag);
 
 
 	/** ICustomView method: this repaints the control */
-	virtual void updateView() override;
+//	virtual void updateView() override;
 
 	/** ICustomView method: send a message to the object (!) */
-	virtual void sendMessage(void* data) override;
+//	virtual void sendMessage(void* data) override;
 
 	virtual void draw(CDrawContext* pContext) override;
 
@@ -483,8 +483,14 @@ private:
 
 	SharedPointer<VSTGUI::CGraphicsPath> mrkpth = nullptr;
 
+	SharedPointer <CGradient> shd = owned(CGradient::create(0.8, 1, CColor(0, 00, 00, 70), CColor(0, 0, 0, 0)));
+
+	SharedPointer <CGradient> drkshd = owned(CGradient::create(.7, 1., CColor(0, 00, 00, 80), CColor(0, 0, 0, 0)));
+
+	SharedPointer <CGradient> lightshde = owned(CGradient::create(.0, .9, CColor(250, 250, 250, 80), CColor(0, 0, 0, 0)));
+
 	// --- lock-free queue for incoming data, sized to 32 in length
-	moodycamel::ReaderWriterQueue<CustomViewMessage, 32>* dataQueue = nullptr; ///< lock-free queue for incoming data, sized to 32 in length
+//	moodycamel::ReaderWriterQueue<CustomViewMessage, 32>* dataQueue = nullptr; ///< lock-free queue for incoming data, sized to 32 in length
 
 	CLASS_METHODS(CustomKnobView2, CKnob, CKnobBase)
 };

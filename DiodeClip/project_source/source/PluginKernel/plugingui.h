@@ -468,6 +468,8 @@ public:
 	/** scale the GUI */
 	void scaleGUISize(uint32_t controlValue);
 
+	bool scaleflag = true;
+
 	/** for preset saving helper which writes preset code for you */
 	void writeToPresetFile();
 

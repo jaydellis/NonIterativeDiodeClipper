@@ -45,8 +45,8 @@ enum controlID {
 	threshold = 15,
 	overbias = 16,
 	dccutoff = 17,
-	feedback = 18,
-	fblowpass = 19,
+	lowshelfsag = 18,
+	lowshelfreq = 19,
 	fbthresh = 20,
 	release = 21,
 	sagVol = 22,
@@ -693,8 +693,45 @@ private: protected:
 	__m128d _dccut = _mm_set1_pd(0.1);
 	};
 
+class ZDF1pole {
+	public:
+		ZDF1pole() {};
+		~ZDF1pole() {};
+
+		void setfilter(double cutoff, double SR) {
+
+			double fc = kPi * cutoff / SR;
+
+			double g = tan( fc ) ;
+
+			k = g / (1.0 + g);
+	}
+
+		double process1poleLP(double x) {
+
+			double vn = (x - state)*k;
+
+			double lpf = ((x - state)*k) + state;
+
+			state = vn + lpf;
+
+			return lpf;
+		}
+
+private: protected:
+
+	double g = 0.1;
+	double k = 0.0;
+	double state = 0.00001;
+};
+
+	ZDF1pole lowshelfL;
+	ZDF1pole lowshelfR;
+
 	 zdf zdf_low;
 	 zdf zdf_high;
+
+	 zdf envfollower;
 
 	 zdf twopolelowp;
 	 __m128 sagfactor = _unityf;
@@ -704,7 +741,7 @@ private: protected:
 	 float sagVt_p = 0.01;
 	 float sagLP_p = 0.01;
 	 float sagintrim_p = 0.01;
-	__m128 sagVolf = _mm_set1_ps(1.);
+	__m128 sagVolume = _mm_set1_ps(1.);
 	__m128 sagVtf  = _mm_set1_ps(1.);
 	__m128 sagInf = _mm_set1_ps(1.);
 
@@ -783,8 +820,8 @@ private: protected:
 	double outputgain_p = 0.;
 
 	double feedback_p = 0;
-	double feedbacklow_p = 8000.;
-	double fbthresh_p = -12;
+	double feedbacklow_p = 50.;
+	float fbthresh_p = -12;
 	double release_p = -12;
 
 	double sdiode = 0;

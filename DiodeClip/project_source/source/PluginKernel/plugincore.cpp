@@ -186,12 +186,12 @@ bool PluginCore::preProcessAudioBuffers(ProcessBufferInfo& processInfo)
 
 	
 	DynamicsProcessorParameters dpram = dyn[0].getParameters();
-	dpram.ratio = .20;
+	dpram.ratio = .50;
 	dpram.calculation = dynamicsProcessorType::kDownwardExpander;
 	dpram.threshold_dB = fbthresh_p;
-	dpram.releaseTime_mSec = release_p;
-	dpram.attackTime_mSec = 5;
-	dpram.kneeWidth_dB = 6;
+	dpram.releaseTime_mSec = 150.;
+	dpram.attackTime_mSec = 1;
+	dpram.kneeWidth_dB = 3;
 	dpram.softKnee = true;
 
 	dyn[0].setParameters(dpram);
@@ -438,17 +438,13 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 	//dcfilter not quick enough 
 	dctimer = FastMin(dctimer + 0.01, 1.);
-
-	zdf_low.setfilter(feedbacklow_p* kPi*oversampsampinv* invSR, 1.4);		// 1/2R this must be most unresonant
-//	zdf_high.setfilter(feedbackhi_p* kPi*oversampsampinv* invSR, 2);
 	
 	float sagtime = 1. / (release_p * .001);
 
 	twopolelowp.setfilter( sagtime  * kPi * invSR, 1.4);
 
-
-//	float vtmakeup = 1./(0.0188039288 + 32.958596608*vt - 17.482802146*vt*vt);
-
+	lowshelfL.setfilter(feedbacklow_p, getSampleRate());
+	lowshelfR.setfilter(feedbacklow_p, getSampleRate());
 	
 	ClassA.setBJT_128(ampVt_p);
 	ClassB.setBJT_128(ampVt_p);
@@ -457,18 +453,15 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 
 		//// Grid saturation from http://willpirkle.com/special/Addendum_A19_Pirkle_v1.0.pdf
-
 	const __m128 _prka = _mm_set1_ps(-0.3241584);
-	const __m128 _prkb = _mm_set1_ps(0.4548416);		//revised so that f(0) = 1;
+	const __m128 _prkb = _mm_set1_ps(0.4548416);		//revised coeffs so that f(0) = 1;
 	const __m128 _prkc = _mm_set1_ps(0.5451584);
 
-//	const __m128 _prka = _mm_set1_ps((-0.3241584);
-//	const __m128 _prkb = _mm_set1_ps(.4473253);		// from p94 
-//	const __m128 _prkc = _mm_set1_ps(0.5451584);	// very small error of ~ -42.48 dB
 
-//	const __m128 _prka = _mm_set1_ps(-0.3241584);
-//	const __m128 _prkb = _mm_set1_ps(0.447);		//from page 62
-//	const __m128 _prkc = _mm_set1_ps(0.545);		// very small error of ~ −41.9 dB
+		//vt
+	vt = thermalvoltage_p * 0.001;
+
+	float currentmakeup = 1. / (1.159148907293 * powf(satcurrent_p, -0.04811517431058769434));
 
 
 	// --- block processing -- write to outputs
@@ -477,12 +470,15 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		sample++, i++)
 	{
 
-		//vt
-		vt = thermalvoltage_p * 0.001;    
+		float sagfct[4] = { 0. };
+		_mm_store_ps(sagfct, sagfactor);
+
+		sagLPf = sagfct[0] * sagLP_p;
+		sagInput = sagInf.m128_f32[0];
+
+			if (sagVt_p < 0) {	sagVtf.m128_f32[0] = 1./sagVtf.m128_f32[0];	}
 
 		float vtmakeup = 1. / (-0.000451063384466717 + 0.04847815336514556 * thermalvoltage_p * sagVtf.m128_f32[0]);
-		float currentmakeup = 1 / (1.159148907293 * powf(satcurrent_p, -0.04811517431058769434));
-
 		vtmakeup = vtmakeup * currentmakeup;
 
 		DiodePair.setDiodePair(resistor_p + sagLPf * 1000, C, Is, vt *sagVtf.m128_f32[0] , getSampleRate() * oversampling_p);
@@ -490,20 +486,17 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 		double meterinl = blockInfo.inputs[0][sample];
 		double meterinr = blockInfo.inputs[1][sample];
 
-		float sagfct[4] = { 0. };
-		_mm_store_ps(sagfct, sagfactor);
+		//decibel conversion
+	//	sagfct[0] = powf(10.f, sagfct[0] * .05f);
+	//	expandL =  dyn[0].computeGain(sagfct[0]);
+	//	expandR =  dyn[1].computeGain(sagfct[0]);
 
-		sagfct[0] = powf(10.f, sagfct[0] * .05f);
-
-		expandL = 1. / dyn[0].computeGain(sagfct[0]);
-		expandR = 1. / dyn[1].computeGain(sagfct[0]);
-
-		sagLPf = expandL * sagLP_p;
-		sagInput = sagInf.m128_f32[0];
+		double sagLowshelfL = 1. / ( 1.+ sagfactor.m128_f32[0]  * FastAbs(feedback_p) * 8.) ;
+		double sagLowshelfR = 1. / (1. + sagfactor.m128_f32[1] * FastAbs(feedback_p) * 8.) ;
 
 		//	if (sse_p == 1)
 			{
-			ingainsm = ingainsm * .999 + 0.001 * ingainfactor  ;
+				ingainsm = ingainsm * .999 + 0.001 * ingainfactor  ;
 				outgainsm = outgainsm * .999 + 0.001 * outgainfactor ;
 				ampgainsm = ampgainsm * .999 + 0.001 * ampgainfactor;
 				dccutsm = dccutsm * .999 + 0.001 * dccutOS;
@@ -511,27 +504,21 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 				assym_sm = assym_sm * .999 + 0.001 * (assym_p) * dctimer;
 
 				const __m128 assym_d = _mm_set1_ps(assym_sm);
-				const __m128 _ingainsm = _mm_set1_ps(ingainsm * oversampling_p * sagInput *1. / vtmakeup);
+				const __m128 _ingainsm = _mm_set1_ps(ingainsm * oversampling_p * sagInput * 1. / vtmakeup);
 				const __m128 _ampgainsm = _mm_set1_ps(ampgainsm);
 				const __m128 _dccutOS = _mm_set1_ps(dccutsm);
 
 				DCblk.set(dccutsm);
 
-				const float inp[4] = { (blockInfo.inputs[0][sample]),
+					 float inp[4] = { (blockInfo.inputs[0][sample]),
 											(blockInfo.inputs[1][sample]),
 												(blockInfo.inputs[0][sample]) * 0,
 													(blockInfo.inputs[1][sample]) * 0 };
 
-		//compute feedback expansion level
+					 float shelfboostcut = signbit(feedback_p)*-2 + 1;
 
-		//		dyn[0].processAudioSample(xoutput[0]);
-		//		dyn[1].processAudioSample(xoutput[1]);
-		//			expandL = 1/dyn[0].getParameters().gainReduction;
-		//			expandR = 1/dyn[1].getParameters().gainReduction;
-
-
-		//Feedback expansion 
-				const __m128 _feedback = _mm_set_ps(0,0, feedback_p*expandR, feedback_p*expandL); // bckwrds sse
+				inp[0] = inp[0] + shelfboostcut * ( sagLowshelfL - 1) * lowshelfL.process1poleLP(inp[0]);
+				inp[1] = inp[1] + shelfboostcut * ( sagLowshelfR - 1 ) * lowshelfL.process1poleLP(inp[1]);
 
 		//Input Gain
 			_upsmp[0] = _mm_mul_ps( _mm_load_ps(inp) , _ingainsm); 
@@ -552,25 +539,20 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 			//DC coupling		// still needs double precision
 					__m128d _xind = _mm_cvtps_pd(_xin);
+					
 					_xind = DCblk.process_128d(_xind);
 					_dcout = _mm_cvtpd_ps(_xind);
 
 				}  
 				else {		//// both need double precision  
-							// 
-
 					__m128d _xind = _mm_cvtps_pd(_xin);
 					_xind = ClassA.processBJT_128d(_xind);
 		//DC coupling		
 					_xind = DCblk.process_128d(_xind);
-
 					_dcout = _mm_cvtpd_ps(_xind);
 				}
 
-		//		__m256d _xin_avx = _mm256_cvtps_pd(_dcout);
-		//		_dcout = _mm256_cvtpd_ps(_xin_avx);
 		//gain
-			//	_dcout = _xinfll[i];
 			_dcout = _mm_mul_ps(_dcout, _ampgainsm);
 
 		// Grid-Conduction stage
@@ -579,12 +561,7 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 
 				_gridout = _mm_mul_ps( _dcout ,  compressionfactor  );
 
-
-		// -feedback lowpass
-				degen = zdf_low.zdf2pLP(_diodeout);
-		//expansion
-				_sumout = _mm_sub_ps(_gridout, _mm_mul_ps(degen, _feedback));
-
+				_sumout = _gridout;
 
 		//Combined SSE Class B Stage
 				if (sse_p == 0) {
@@ -614,20 +591,22 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			//sag follower filter ~13.5 Hz slightly resonant after Kuehnel
 			sagfactor = twopolelowp.zdf2pLP( _mm_and_ps(_xoutput[0], absmask) );
 
+			sagfactor = _mm_and_ps(sagfactor, absmask);
+
 			//appy expansion
-		__m128 expsagfactor = _mm_mul_ps( sagfactor, _mm_set1_ps(expandL));
+		//	__m128 expsagfactor = _mm_mul_ps(sagfactor, _mm_set1_ps(expandL));
 
 			//sag shaping after Kuehnel// 
 
-			sagVtf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps(expsagfactor, _mm_set1_ps(sagVt_p))) );
+			sagVtf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps( sagfactor, _mm_set1_ps(FastAbs(sagVt_p)))) );
 
-			sagVolf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps(expsagfactor, _mm_set1_ps(sagVol_p))));
+			sagVolume = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps( sagfactor, _mm_set1_ps(sagVol_p))));
 
-			sagInf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps(expsagfactor, _mm_set1_ps(sagintrim_p))));
+			sagInf = _mm_div_ps(_unityf, _mm_add_ps(_unityf, _mm_mul_ps( sagfactor, _mm_set1_ps(sagintrim_p))));
 
 			_xoutput[0] = _mm_mul_ps(_xoutput[0], _mm_set1_ps(outgainsm));
 
-			_xoutput[0] = _mm_mul_ps(_xoutput[0], sagVolf);
+			_xoutput[0] = _mm_mul_ps(_xoutput[0], sagVolume);
 
 			_mm_store_ps(xoutput, _xoutput[0]);
 
@@ -658,7 +637,6 @@ bool PluginCore::renderFXPassThrough(ProcessBlockInfo& blockInfo)
 			blockInfo.outputs[0][sample] = (xout)   ;
 			blockInfo.outputs[1][sample] = (xoutR)  ;
 	} 
-
 
 		//meters
 		{
@@ -870,7 +848,7 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 
 		//fb thresh
 		if (dynknob[0]) {
-			valstrng = std::to_string(expandL);
+			valstrng = std::to_string(expandL *  sagfactor.m128_f32[0]);
 			y = valstrng.c_str();
 			knobMessage.queryString.assign(y);
 
@@ -924,7 +902,7 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 		//output gain
 		if (dynknob[4]) {
 
-			float vval = FastMax(-0.f, FastMin(48.f, (20.f* log10f(outgainsm * sagVolf.m128_f32[0]) + 24.f))) / 48.f;
+			float vval = FastMax(-0.f, FastMin(48.f, (20.f* log10f(outgainsm * ( sagVolume.m128_f32[0] )) + 24.f))) / 48.f;
 
 			valstrng = std::to_string( vval );
 			y = valstrng.c_str();
@@ -938,7 +916,10 @@ bool PluginCore::processMessage(MessageInfo& messageInfo)
 		if (dynknob[5]) {
 
 			//from customparamameters antilog scaling// thanks Will
+
 			float vall = (kCTCorrFactorAntiUnity)*(-pow(10.0, ( -(vt * 1000. * sagVtf.m128_f32[0]) / (200.f) / kCTCoefficient)) + 1.0);
+
+			if (sagVt_p < 0) { vall = (kCTCorrFactorAntiUnity)*(-pow(10.0, (-(vt * 1000. / sagVtf.m128_f32[0]) / (200.f) / kCTCoefficient)) + 1.0); }
 
 			valstrng = std::to_string(  vall );
 			y = valstrng.c_str();
@@ -1274,7 +1255,7 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&hipass_p, boundVariableType::kInt);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::hipasscutoff, "highpass freq", "Hz", controlVariableType::kDouble, 1, 200, 10, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::hipasscutoff, "highpass freq", "Hz", controlVariableType::kDouble, 1, 100, 10, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&hipasscutoff_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
@@ -1310,39 +1291,39 @@ bool PluginCore::initPluginParameters()
 	piParam->setBoundVariable(&overbias_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::dccutoff, "dccut", "Hz", controlVariableType::kDouble, 2., 200., 10., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::dccutoff, "dccut", "Hz", controlVariableType::kDouble, 5., 100., 10., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&dccut_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::feedback, "fbthreshold", "-x", controlVariableType::kDouble, -1., 1., 0., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::lowshelfsag, "sag->inputlowshelf", "x", controlVariableType::kDouble, -1., 1., 0., taper::kLinearTaper);
 	piParam->setBoundVariable(&feedback_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::fblowpass, "fbacklowpass", "Hz", controlVariableType::kDouble, 10, 10000., 50., taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::lowshelfreq, "lowshelffreq", "Hz", controlVariableType::kDouble, 30, 300., 80., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&feedbacklow_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::fbthresh, "fbackthresh", "Hz", controlVariableType::kDouble, -36., 12., -12., taper::kLinearTaper);
-	piParam->setBoundVariable(&fbthresh_p, boundVariableType::kDouble);
+	piParam = new PluginParameter(controlID::fbthresh, "fbackthresh", "db", controlVariableType::kFloat, -36., 12., -12., taper::kLinearTaper);
+	piParam->setBoundVariable(&fbthresh_p, boundVariableType::kFloat);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::release, "release", "ms", controlVariableType::kDouble, 1., 500., 200., taper::kLinearTaper);
+	piParam = new PluginParameter(controlID::release, "release", "ms", controlVariableType::kDouble, 50., 400., 200., taper::kAntiLogTaper);
 	piParam->setBoundVariable(&release_p, boundVariableType::kDouble);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::sagVol, "sagvol", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::sagVol, "sagvol", "x", controlVariableType::kFloat, 0., 5., 0.1, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&sagVol_p, boundVariableType::kFloat);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::sagVt, "sagvt", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::sagVt, "sagvt", "x", controlVariableType::kFloat, -5., 5., 0.1, taper::kLinearTaper);
 	piParam->setBoundVariable(&sagVt_p, boundVariableType::kFloat);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::sagLP, "saglp", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::sagLP, "saglp", "x", controlVariableType::kFloat, 0., 5., 0.1, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&sagLP_p, boundVariableType::kFloat);
 	addPluginParameter(piParam);
 
-	piParam = new PluginParameter(controlID::sagIntrim, "sag_in", "x", controlVariableType::kFloat, 0., 8., 0.1, taper::kAntiLogTaper);
+	piParam = new PluginParameter(controlID::sagIntrim, "sag_in", "x", controlVariableType::kFloat, 0., 5., 0.1, taper::kAntiLogTaper);
 	piParam->setBoundVariable(&sagintrim_p, boundVariableType::kFloat);
 	addPluginParameter(piParam);
 

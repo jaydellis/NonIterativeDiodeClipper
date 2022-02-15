@@ -981,14 +981,15 @@ CustomKnobView2::CustomKnobView2(const VSTGUI::CRect& size, IControlListener* li
 {
 	// --- ICustomView
 	// --- create our incoming data-queue
-	dataQueue = new moodycamel::ReaderWriterQueue<CustomViewMessage, 32>;
+//	dataQueue = new moodycamel::ReaderWriterQueue<CustomViewMessage, 32>;
 }
 
 CustomKnobView2::~CustomKnobView2(void)
 {
-	if (dataQueue) delete dataQueue;
+	//if (dataQueue) delete dataQueue;
 }
 
+/*
 void CustomKnobView2::sendMessage(void* data)
 {
 	CustomViewMessage* viewMessage = (CustomViewMessage*)data;
@@ -1021,19 +1022,16 @@ void CustomKnobView2::updateView()
 	// --- force redraw
 	invalid();
 }
+*/
 
 void CustomKnobView2::draw(CDrawContext* pContext) {
 
-	pContext->setDrawMode(kAntiAliasing | kNonIntegralMode);
+	pContext->setDrawMode(kAntiAliasing );
 	
 	CRect r = getViewSize();
 	r.inset(3,3);
 	CCoord w = r.getWidth();
 	CCoord h = r.getHeight();	
-	
-//	pContext->setFrameColor(kGreyCColor);
-//	pContext->drawGraphicsPath(patho, CDrawContext::kPathStroked);		// arc groove
-
 
 	////init - generate radial marks
 	if (getViewSize() != oldsize) 
@@ -1062,13 +1060,12 @@ void CustomKnobView2::draw(CDrawContext* pContext) {
 	pContext->setLineWidth(2);
 
 	//outer arc
-	auto path = owned(pContext->createGraphicsPath());
-	auto path2 = owned(pContext->createGraphicsPath());
+//	auto path = owned(pContext->createGraphicsPath());
+//	auto path2 = owned(pContext->createGraphicsPath());
+//	path->addArc(r, -225, -225 + 270 * getValueNormalized(), 1);
+//	path2->addArc(r, -225 + 270 * getValueNormalized(), 45, 1);
 
-	path->addArc(r, -225, -225 + 270 * getValueNormalized(), 1);
-	path2->addArc(r, -225 + 270 * getValueNormalized(), 45, 1);
-
-	pContext->setFrameColor(coronaColor); 
+//	pContext->setFrameColor(coronaColor); 
 //	pContext->drawGraphicsPath(path, CDrawContext::kPathStroked);       // arc value shaded
 
 
@@ -1077,13 +1074,14 @@ void CustomKnobView2::draw(CDrawContext* pContext) {
 	pContext->setFrameColor(transblck);
 	pContext->drawGraphicsPath(mrkpth, CDrawContext::kPathStroked);
 
+	pContext->setDrawMode(kAliasing);
+
 	//back shadow
-	CRect rr = r;
-	rr.inset(5,5); rr.offset(0, 3);
-	auto pathsh = owned(pContext->createGraphicsPath());
-	SharedPointer <CGradient> shd = owned(CGradient::create(0.8, 1, CColor( 0, 00, 00, 70), CColor(0, 0, 0, 0)));
-	pathsh->addEllipse(rr);
-	pContext->fillRadialGradient(pathsh, *shd, rr.getCenter(), .5*rr.getWidth());
+//		CRect rr = r;
+//		rr.inset(5,5); rr.offset(0, 3);
+//		auto pathsh = owned(pContext->createGraphicsPath());
+//		pathsh->addEllipse(rr);
+//		pContext->fillRadialGradient(pathsh, *shd, rr.getCenter(), .5*rr.getWidth());
 
 	//cap
 	CColor drkcap = getColorShadowHandle();
@@ -1092,14 +1090,11 @@ void CustomKnobView2::draw(CDrawContext* pContext) {
 	lum *= 0.85;
 	drkcap.fromHSV(hue, sat, lum);
 
-	CLineStyle lineStyle(kLineOnOffDash);
-	lineStyle.getDashLengths() = coronaLineStyle.getDashLengths();
-	lineStyle.setLineCap(CLineStyle::kLineCapRound);
-	pContext->setFrameColor(drkcap);
-	pContext->setLineStyle(lineStyle);
-	pContext->setLineWidth(6);
+
 	CRect inner_r = r;
 	inner_r.inset(9, 9);
+
+	pContext->setDrawMode(kAntiAliasing);
 
 	r.inset(7, 7);
 	pContext->setFillColor(getColorShadowHandle());
@@ -1108,47 +1103,44 @@ void CustomKnobView2::draw(CDrawContext* pContext) {
 	pContext->drawEllipse(r, kDrawFilled);
 
 	// grooves
-	pContext->drawArc(inner_r, 270 * getValueNormalized(), 270 * getValueNormalized() - 1, kDrawStroked);
+	CLineStyle lineStyle(kLineOnOffDash);
+	lineStyle.getDashLengths() = coronaLineStyle.getDashLengths();
+	lineStyle.setLineCap(CLineStyle::kLineCapRound);
+	pContext->setFrameColor(drkcap);
+	pContext->setLineStyle(lineStyle);
 
+	pContext->setLineWidth(6);
+	float startoffset = getStartAngle();
+	pContext->drawArc(inner_r, getStartAngle() + 270 * getValueNormalized(), getStartAngle() + 270 * getValueNormalized() - 1, kDrawStroked);
 
+	pContext->setDrawMode(kAliasing);
 	//cap gradient
-	auto pathsh3 = owned(pContext->createGraphicsPath());
-	SharedPointer <CGradient> shd3 = owned(CGradient::create(.0, .9, CColor(250, 250, 250, 80), CColor(0, 0, 0, 0)));
-	pathsh3->addEllipse(r);
-	pContext->fillLinearGradient(pathsh3, *shd3, r.getTopLeft(), r.getBottomRight());
+//		auto pathsh3 = owned(pContext->createGraphicsPath());
+//		pathsh3->addEllipse(r);
+//		pContext->fillLinearGradient(pathsh3, *lightshde, r.getTopLeft(), r.getBottomRight());
+//	
+//		r.inset(-5, -5);
+//		r.offset(2, 3);
+//	
+//		auto pathsh2 = owned(pContext->createGraphicsPath());	
+//		pathsh2->addEllipse(r);
+//		pContext->fillRadialGradient(pathsh2, *drkshd, r.getCenter(), r.getWidth()*.5f);
 
-	r.inset(-5, -5);
-	r.offset(2, 3);
-	//	pContext->setFillColor(kGreyCColor);
-	auto pathsh2 = owned(pContext->createGraphicsPath());
-	SharedPointer <CGradient> shd2 = owned(CGradient::create(.7, 1., CColor(0, 00, 00, 80), CColor(0, 0, 0, 0)));
-	pathsh2->addEllipse(r);
-	pContext->fillRadialGradient(pathsh2, *shd2, r.getCenter(), r.getWidth()*.5f);
-
+	pContext->setDrawMode(kAntiAliasing);
 
 	//handle
-	CPoint where;
-	valueToPoint(where);
-
-	CPoint origin(getViewSize().getWidth() * .5, getViewSize().getHeight() * .5 );
-	where.offset(getViewSize().left - 1, getViewSize().top);
-	origin.offset(getViewSize().left - 1, getViewSize().top);
-
 	pContext->setLineWidth(handleLineWidth);
 	pContext->setLineStyle(CLineStyle(CLineStyle::kLineCapRound));
-	//	pContext->drawLine(where, origin);
+	float hndlngth = getCoronaOutlineWidthAdd() ;
 
-	where.offset(1, -1);
-	origin.offset(1, -1);
+	float hndlx = cosf((getValueNormalized() + 0.5)*M_PI*1.5 ) * inner_r.getWidth();
+	float hndly = sinf((getValueNormalized() + 0.5)*M_PI*1.5 ) * inner_r.getWidth();
 
-	CPoint wh2(((where.x * .8 + origin.x * .2)), ((where.y * .8 + origin.y * .2)));
-
+	CPoint hndl  ( (0.5f * hndlx ) + inner_r.getCenter().x, inner_r.getCenter().y + (0.5f * hndly ));
+	CPoint hndlin( (hndlngth * hndlx ) + inner_r.getCenter().x, inner_r.getCenter().y + (hndlngth * hndly));
+	
 	pContext->setFrameColor(colorHandle);
-	pContext->drawLine(where, wh2);		
-
-
-	pContext->setFrameColor(kRedCColor);
-	pContext->drawString(str, getViewSize().getCenter(), true);
+	pContext->drawLine(hndl, hndlin);		
 
 
 	setDirty(false);
@@ -1367,7 +1359,7 @@ void DynamicKnobView::draw(CDrawContext* pContext) {
 		dynvalr.inset(6, 6);
 		path->addArc(dynvalr, -225 + cntr, -225 + cntr + 270 * strngv, clockwise);
 	
-		CColor dyncol(100, 100, 100, 150);
+		CColor dyncol(200, 100, 100, 100);
 		pContext->setFrameColor(dyncol);
 		pContext->setLineWidth(3.f);
 		pContext->drawGraphicsPath(path, CDrawContext::kPathStroked);
